@@ -10,9 +10,7 @@ const { CampaignRules } = require('./rules')
 class GrowthInvite {
   /**
    * Returns a list of pending rewards:
-   *  - get list of referees from growth_referral. Note: for now we only care
-   *    about referees that published their profiles. We ignore others
-   *    that haven't made it that far.
+   *  - get list of referees from growth_referral.
    *  - filter out invites completed during the current campaign.
    *  - filter out invites completed during prior campaigns.
    * @param {string} referrer: ethAddress of the referrer.
@@ -65,19 +63,33 @@ class GrowthInvite {
   static async _decorate(reward, status) {
     const referee = reward.refereeEthAddress
 
-    let identity = await db.Identity.findOne({
+    let contactName = ''
+    const identity = await db.Identity.findOne({
       where: { ethAddress: referee }
     })
-    if (!identity) {
-      // Defensive coding. This should theoretically not happen.
-      logger.error(`Failed loading identity for referee ${referee}`)
-      identity = { firstName: '', lastName: '' }
+    if (identity) {
+      contactName = (identity.firstName || '') + ' ' + (identity.lastName || '')
+    } else {
+      // The referee did not publish an identity yet.
+      // Attempt to lookup their contact from the growth_invite table.
+
+      // TODO: uncomment once the listener populates
+      //  growth_invite.refereeEthAddress
+      //const invite = db.GrowthInvite.findOne({
+      //  where: { refereeEthAddress: referee }
+      //})
+      //if (invite) {
+      //  contactName = invite.contact
+      //} else {
+      //  logger.debug(`No contact available for ${referee}`)
+      //}
+      logger.debug(`No contact available for ${referee}`)
     }
 
     return {
       status,
       walletAddress: referee,
-      contactName: (identity.firstName || '') + ' ' + (identity.lastName || ''),
+      contactName,
       reward: reward.value
     }
   }
