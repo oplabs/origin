@@ -526,4 +526,32 @@ router.get('/marketplace-addresses', async (req, res) => {
   }
 })
 
+router.post('/webrtc-create-offer', async (req, res) => {
+  const { offer, signature } = req.body
+
+  const result = await webrtc.createOffer(offer, signature)
+  res.send(result)
+})
+
+router.post('/webrtc-accept-offer', async (req, res) => {
+  const { acceptance, signature } = req.body
+
+  const result = await webrtc.acceptOffer(acceptance, signature)
+  res.send(result)
+})
+
+router.post('/webrtc-withdraw-offer', async (req, res) => {
+  const { withdrawal, signature } = req.body
+
+  const result = await webrtc.withdrawOffer(withdrawal, signature)
+  res.send(result)
+})
+
+router.post('/webrtc-claim-offer', async (req, res) => {
+  const { listingID, offerID, ipfsBytes, payout, signature } = req.body
+
+  const result = await webrtc.withdrawOffer(listingID, offerID, ipfsBytes, payout, signature)
+  res.send(result)
+})
+
 export default router

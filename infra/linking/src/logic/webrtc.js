@@ -29,6 +29,13 @@ const CALL_STARTED = 'started'
 const CALL_DECLINED = 'declined'
 const CALL_ENDED = 'ended'
 
+
+const CENTRALIZED_OFFER_PREFIX = 'C.'
+
+const PROMOTE_COIN = "p_coin"
+const LOCKED_COINT = "l_coin"
+const COIN = "coin"
+
 const CALL_COUNT_PREFIX = 'count.'
 const CALL_DECLINE_PREFIX = "decline."
 
@@ -38,14 +45,31 @@ function getFullId(listingID, offerID) {
   return `${listingID}-${offerID}`
 }
 
+function isCentralized(listingID) {
+  return listingID.startsWith(CENTRALIZED_OFFER_PREFIX)
+}
+
+function toSignListingID(listingID) {
+  if (isCentralized(listingID)) {
+    return web3.utils.hexToNumberString('0x' + listingID.slice(2))
+  } else {
+    return listingID
+  }
+}
+
 function splitFullId(fullId) {
   const ids = fullId.split('-')
   return {listingID:ids[0], offerID:ids[1]}
-
 }
 
 function getBlockKey(fromAddress, toAddress) {
   return `blocked.${fromAddress}.${toAddress}`
+}
+
+
+
+function addBNs(value1, value2) {
+  return web3.utils.toBN(value1).add(web3.utils.toBN(value2)).toString()
 }
 
 // Objects returned from web3 often have redundant entries with numeric
@@ -111,13 +135,27 @@ class WebrtcSub {
     }
   }
 
+  sendBalance() {
+    if (this.user) {
+      const balances = {}
+      for (const key of ['balance', 'lockedBalance', 'promoteBalance', 'lastOfferId']) {
+        if (this.user[key] && this.user[key] != '0') {
+          balances[key] = this.user[key]
+        }
+      }
+      this.sendMsg({balances})
+    }
+  }
+
   async setUserInfo() {
-    const user = await this.logic.getUserInfo(this.subscriberEthAddress)
+    const user = await db.UserInfo.findOne({ where: {ethAddress:this.subscriberEthAddress} })
     if (user) {
-      if (user.data.banned) {
+      this.user = user
+      if (user.banned) {
         this.banned = true
       }
       this.userInfo = user.info
+      this.sendBalance()
     }
     // set active only after user info is gotten
     this.setActive()
@@ -139,7 +177,7 @@ class WebrtcSub {
     this.redisSub.on('message', (channel, msg) => {
       const {from, subscribe, updated, rejected, collected, declined} = JSON.parse(msg)
       const { offer, accept } = subscribe || {}
-      if (channel == CHANNEL_ALL || this.peers.includes(from) || offer || accept || rejected || collected || declined)
+      if (channel == CHANNEL_ALL || this.peers.includes(from) || offer || accept || rejected || collected || declined || updated)
       {
         logger.info("sending message to client:", msg)
         try {
@@ -148,7 +186,7 @@ class WebrtcSub {
           logger.info(error)
         }
       }
-      if(channel == CHANNEL_ALL && from == this.subscriberEthAddress && updated) {
+      if(from == this.subscriberEthAddress && updated) {
         this.setUserInfo()
       }
     })
@@ -329,12 +367,12 @@ class WebrtcSub {
       const key = getBlockKey(block, this.subscriberEthAddress)
       this.redis.set(key, "1")
       logger.info("setting: ", key)
-      this.redis.publish(CHANNEL_PREFIX + block, JSON.stringify({from:block, updated:1}))
+      this.logic.sendUpdated(block)
       return true
     } else if (unblock) {
       const key = getBlockKey(unblock, this.subscriberEthAddress)
       this.redis.del(key)
-      this.redis.publish(CHANNEL_PREFIX + unblock, JSON.stringify({from:unblock, updated:1}))
+      this.logic.sendUpdated(unblock)
       logger.info("clearing: ", key)
       return true
     }
@@ -364,7 +402,7 @@ class WebrtcSub {
           // TODO: we need a price on this offer so need to load up profiles here as well
           if (offer && offer.active && !offer.rejected
             && offer.from == this.subscriberEthAddress && (!offer.to || offer.to == ethAddress) &&
-            (web3.utils.toBN(offer.contractOffer.totalValue).gte(this.getMinCost) || accepted))
+            (web3.utils.toBN(offer.contractOffer.totalValue).gte(this.getMinCost()) || accepted))
           {
             if (subscribe.callId && accepted) {
               // you can only call into accepted offers
@@ -375,7 +413,7 @@ class WebrtcSub {
               }
               offer.lastNotify = new Date()
             } else if (!offer.lastNotify || (new Date() - offer.lastNotify) > 1000 * 60* 60 && !accepted) {
-              this.logic.sendNotificationMessage(ethAddress, `You have received an offer to talk for ${offer.amount} ETH from ${this.getName()}.`, {listingID, offerID})
+              this.logic.sendNotificationMessage(ethAddress, `You have received an offer to talk for ${offer.amount} {offer.amountType.toUpperCase()} from ${this.getName()}.`, {listingID, offerID})
               offer.lastNotify = new Date()
             } else {
               logger.info("Limit for sending offers sent.")
@@ -661,6 +699,9 @@ class WebrtcSub {
             await userInfo.update({hidden})
             this.logic.broadcastUpdated(ethAddress)
           }
+        } else if (admin.givePromote) {
+          const {ethAddress, amount} = admin.givePromote
+          this.logic.givePromoteCoins(ethAddress, amount)
         }
       })()
       return true
@@ -796,6 +837,10 @@ export default class Webrtc {
     this.redis.publish(CHANNEL_ALL, JSON.stringify({from:ethAddress, updated:1}))
   }
 
+  sendUpdated(ethAddress) {
+    this.redis.publish(CHANNEL_PREFIX + ethAddress, JSON.stringify({from:ethAddress, updated:1}))
+  }
+
   async getRank(ethAddress, info) {
     let rank = 0
     if (info && info.attests) {
@@ -841,6 +886,266 @@ export default class Webrtc {
       return true
     }
     return false
+  }
+
+  async createOffer(offer, signature) {
+    const {createDate, promote, from, to, offerID, value, verifier} = offer
+
+    const currentDate = new Date()
+    const tsDate = new Date(createDate)
+    const message = JSON.stringify(offer)
+    const recovered = web3.eth.accounts.recover(message, signature)
+    const listingID = CENTRALIZED_OFFER_PREFIX + from.slice(2)
+
+    if (offerID && recovered == from && currentDate - tsDate <  60 * 1000) //you got a minute to submit this thing
+    {
+      // let's figure out what the offer id is
+      //
+      const fullId = getFullId(listingID, offerID)
+
+      await db.sequelize.transaction(async (transaction) => {
+        const user = await db.UserInfo.findOne({ where: {ethAddress:from } }, {transaction})
+        const balanceUpdate = {}
+        const funding = {}
+        const BNValue = web3.utils.toBN(value)
+
+        if (Number(offerID) < user.lastOfferId) {
+          throw new Error(`OfferID ${offerID} not greater than last offerID ${user.lastOfferId}`)
+        }
+
+        if (promote) {
+          const BNPromoteBalance = web3.utils.toBN(user.promoteBalance)
+          if (BNPromoteBalance.lt(BNValue))
+          {
+            throw new Error(`Balance ${BNPromoteBalance.toString()} not greater than last value ${value}`)
+          }
+
+          balanceUpdate.promoteBalance = BNPromoteBalance.sub(BNValue).toString()
+          funding.promoteBalance = BNValue.toString()
+        } else {
+
+          const BNBalance = web3.utils.toBN(user.balance)
+          const BNLockedBalance = web3.utils.toBN(user.lockedBalance)
+          const BNTotalBalance = BNBalance.add(BNLockedBalance)
+
+          if (BNTotalBalance.lt(BNValue))
+          {
+            throw new Error(`Total balance ${BNTotalBalance.toString()} not greater than last value ${value}`)
+          }
+          let BNRunningValue = BNValue
+          if(!BNLockedBalance.isZero()) {
+            if (BNRunningValue.gt(BNLockedBalance)) {
+              balanceUpdate.lockedBalance = '0'
+              funding.lockedBalance = BNLockedBalance.toString()
+              BNRunningValue = BNRunningValue.sub(BNLockedBalance) //use up the entire lock balance
+            } else {
+              funding.lockedBalance = BNRunningValue.toString()
+              balanceUpdate.lockedBalance = BNLockedBalance.sub(BNRunningValue).toString()
+              BNRunningValue = web3.utils.toBN('0')
+            }
+          }
+
+          if (!BNRunningValue.isZero()) {
+            if (BNRunningValue.eq(BNBalance)) {
+              balanceUpdate.balance = '0'
+              funding.balance = BNBalance.toString()
+            } else if (BNRunningValue.lt(BNBalance)) {
+              funding.balance = BNRunningValue.toString()
+              balanceUpdate.balance = BNBalance.sub(BNRunningValue).toString()
+            } else {
+              throw new Error('Running balance exceeds balance')
+            }
+          }
+        }
+
+        const initInfo = {...offer}
+        const contractOffer = { funding, promote, status:'1', totalValue:value, value, seller:to, buyer:from, verifier }
+
+        const offer = {
+          from,
+          to,
+          fullId,
+          amount : web3.utils.fromWei( contractOffer.totalValue ),
+          amountType: 'chai',
+          contractOffer,
+          initInfo,
+          active: true
+        }
+        await db.WebrtcOffer.create(offer, {transaction})
+        await user.update({...balanceUpdate, lastOfferId:offerID}, {transaction})
+      })
+      this.sendUpdated(from)
+      return {listingID, offerID}
+    } else {
+      throw new Error("Cannot auth create offer")
+    }
+  }
+
+  async acceptOffer(acceptance, signature) {
+    const {accept, offerID, listingID, from, createDate} = acceptance
+    const currentDate = new Date()
+    const tsDate = new Date(createDate)
+    const message = JSON.stringify(acceptance)
+    const recovered = web3.eth.accounts.recover(message, signature)
+
+    if (!isCentralized(listingID)) {
+      throw new Error("Cannot accept none centralized offer")
+    }
+
+    if (accept && recovered == from && currentDate - tsDate <  60 * 1000) //you got a minute to submit this thing
+    {
+      const fullId = getFullId(listingID, offerID)
+      const dbOffer = await db.WebrtcOffer.findOne({ where: {fullId}})
+
+      if (dbOffer.to == from && dbOffer.contractOffer.status == '1') {
+        const contractOffer = dbOffer.contractOffer
+        //set as accepted
+        contractOffer.status = '2'
+        //ensure the reciever actually exists
+        await db.UserInfo.upsert({ethAddress:from})
+        await dbOffer.update({contractOffer})
+        return {listingID, offerID, transactionHash:'C'}
+      }
+    } else {
+      throw new Error("Acceptance signature not validated")
+    }
+  }
+
+  async withdrawOffer(withdrawal, signature) {
+    const {withdraw, offerID, listingID, from, createDate} = withdrawal
+    const currentDate = new Date()
+    const tsDate = new Date(createDate)
+    const message = JSON.stringify(withdrawal)
+    const recovered = web3.eth.accounts.recover(message, signature)
+
+    if (!isCentralized(listingID)) {
+      throw new Error("Cannot accept none centralized offer")
+    }
+
+    if (withdrawal && recovered == from && currentDate - tsDate <  60 * 1000) //you got a minute to submit this thing
+    {
+      const fullId = getFullId(listingID, offerID)
+
+      await db.sequelize.transaction(async (transaction) => {
+        const dbOffer = await db.WebrtcOffer.findOne({ where: {fullId}}, {transaction})
+        if (dbOffer.from == from && dbOffer.contractOffer.status == '1') {
+          const contractOffer = dbOffer.contractOffer
+          //set as accepted
+          contractOffer.status = null
+          const funding = contractOffer.funding
+
+          const payer = await db.UserInfo.findOne({ where: {ethAddress:from } }, {transaction})
+          const balanceUpdate = {}
+
+          if (funding.promoteBalance) {
+            balanceUpdate.promoteBalance = addBNs(payer.promotebalance, funding.promoteBalance)
+          }
+
+          if (funding.lockedBalance) {
+            balanceUpdate.lockedBalance = addBNs(payer.lockedBalance, funding.lockedBalance)
+          }
+
+          if (funding.balance) {
+            balanceUpdate.balance = addBNs(payer.balance, funding.balance)
+          }
+
+          await payer.update(balanceUpdate, {transaction})
+          await dbOffer.update({active:false, contractOffer}, {transaction})
+        } else {
+          throw new Error("invalid offer to withdraw")
+        }
+      })
+      this.sendUpdated(from)
+      return true
+    }
+  }
+
+  _consumeRefundBalance(BNRefund, user, funding, update, key) {
+    if (!BNRefund.isZero() && funding[key]) {
+      const BNBalance = web3.utils.toBN(funding[key])
+      if (BNBalance.gt(BNRefund)) {
+        update[key] = addBNs(user[key], BNRefund)
+        return web3.utils.toBN('0')
+      } else {
+        update[key] = addBNs(user[key], BNBalance)
+        return BNRefund.sub(BNBalance)
+      }
+    }
+    return BNRefund
+  }
+
+  async claimOffer(listingID, offerID, ipfsBytes, payout, signature) {
+    //
+    // TODO: move this to client side later
+    //
+    //
+    const fullId = getFullId(listingID, offerID)
+    if (!isCentralized(listingID)) {
+      throw new Error("Cannot claim none centralized offer")
+    }
+
+    const recoveredAddress = await this.hot.recoverFinalize(toSignListingID(listingID), offerID, ipfsBytes, payout, '0', signature)
+
+    let from, to;
+
+    await db.sequelize.transaction(async (transaction) => {
+      const dbOffer = await db.WebrtcOffer.findOne({ where: {fullId}}, {transaction})
+      if (dbOffer && dbOffer.active && dbOffer.contractOffer) {
+        const {contractOffer} = dbOffer
+
+        if (dbOffer.to != recoveredAddress) {
+          throw new Error(`${recoveredAddress} does not offer to ${dbOffer.to}`)
+        }
+        
+        if (contractOffer.status != '2') {
+          throw new Error(`Claim invalid offer status of ${contractOffer.status}`)
+        }
+        from = dbOffer.from
+        to = dbOffer.to
+        
+        if (payout != dbOffer.lastVoucher.payout) {
+          throw new Error(`${payout} does not match voucher payout: ${dbOffer.lastVoucher.payout}`)
+        }
+
+        const payerBalanceUpdate = {}
+        const recBalanceUpdate = {}
+
+        const payer = await db.UserInfo.findOne({ where: {ethAddress:dbOffer.from } }, {transaction})
+        const receiver = await db.UserInfo.findOne({ where: {ethAddress:dbOffer.to } }, {transaction})
+
+        if (contractOffer.promote) {
+          //promote moves from promote into locked
+          recBalanceUpdate.lockedBalance = addBNs(receiver.lockedBalance, payout)
+        } else {
+          recBalanceUpdate.balance = addBNs(receiver.balance, payout)
+        }
+
+        let BNRefund = web3.utils.toBN(contractOffer.value).sub(web3.utils.toBN(payout))
+        const funding = contractOffer.funding
+
+        BNRefund = this._consumeRefundBalance(BNRefund, payer, funding, payerBalanceUpdate, 'balance')
+        BNRefund = this._consumeRefundBalance(BNRefund, payer, funding, payerBalanceUpdate, 'lockedBalance')
+        BNRefund = this._consumeRefundBalance(BNRefund, payer, funding, payerBalanceUpdate, 'promoteBalance')
+
+        if (!BNRefund.isZero()) {
+          throw new Error(`We cannot consume the entire refund ${funding}  refund: ${BNRefund.toString()}`)
+        }
+
+        await payer.update(payerBalanceUpdate, {transaction})
+        await receiver.update(recBalanceUpdate, {transaction})       
+
+        contractOffer.status = null
+        //collected via server
+        contractOffer.collected = true
+        await dbOffer.update({active:false, contractOffer}, {transaction})
+      } else {
+        throw new Error("invalid offer to claim")
+      }
+    })
+
+    this.sendUpdated(from)
+    this.sendUpdated(to)
+    return true
   }
 
   async getUserInfo(ethAddress, watcherAddress) {
@@ -1002,14 +1307,14 @@ export default class Webrtc {
           return
         }
       }
-      const recoveredAddress = await this.hot.recoverFinalize(listingID, offerID, ipfsHash, payout, fee, signature)
-      if (recoveredAddress == offer.contractOffer.verifier)
+      const recoveredAddress = await this.hot.recoverFinalize(toSignListingID(listingID), offerID, ipfsHash, payout, fee, signature)
+      if (recoveredAddress == offer.contractOffer.verifier || recoveredAddress == offer.from )
       {
         await offer.update({lastVoucher:voucher})
         return true
       }
 
-      if(recoveredAddress == this.hot.account.address && (recoveredAddress == offer.seller || recoveredAddress == offer.initInfo.offerTerms.sideVerifier)) 
+      if(recoveredAddress == this.hot.account.address && (recoveredAddress == offer.from || recoveredAddress == offer.initInfo.offerTerms.sideVerifier)) 
       {
         await offer.update({lastVoucher:voucher})
         return true
@@ -1021,10 +1326,9 @@ export default class Webrtc {
     const offer = await this.getOffer(listingID, offerID)
 
     if(offer.active && offer.contractOffer.verifier == this.hot.account.address){
-      const recoveredAddress = await this.hot.recoveredFinalize(listingID, offerID, ipfsBytes, payout, verifyFee, sig)
+      const recoveredAddress = await this.hot.recoverFinalize(toSignListingID(listingID), offerID, ipfsBytes, payout, verifyFee, sig)
       return recoveredAddress == offer.seller || recoveredAddress == offer.initInfo.offerTerms.sideVerifier
     }
-
   }
 
   async verifySubmitFinalize(listingID, offerID, ipfsHash, behalfFee, fee, payout, sellerSig, sig) {
@@ -1044,8 +1348,13 @@ export default class Webrtc {
 
   async getOffer(listingID, offerID, transactionHash, blockNumber, _dbOffer) {
     const fullId = getFullId(listingID, offerID)
-    const contractOffer = filterObject(await this.contract.methods.offers(listingID, offerID).call())
     const dbOffer = _dbOffer || await db.WebrtcOffer.findOne({ where: {fullId}})
+
+    if (isCentralized(listingID)) {
+      return dbOffer
+    }
+
+    const contractOffer = filterObject(await this.contract.methods.offers(listingID, offerID).call())
 
     if (!contractOffer || (contractOffer.status == '0' && contractOffer.buyer == emptyAddress)){
       if (!dbOffer){
@@ -1273,5 +1582,19 @@ export default class Webrtc {
       return {site, account, accountUrl, sanitizedUrl}
     }
     return {error:query.error}
+  }
+
+  async givePromoteCoins(ethAddress, amount) {
+    const coins = web3.utils.toWei(amount)
+
+    await db.sequelize.transaction(async (transaction) => {
+      const user= await db.UserInfo.findOne({ where: {ethAddress} }, {transaction})
+      if (!user) {
+        await db.UserInfo.create({ethAddress, promoteBalance: coins.toString()}, {transaction})
+      } else {
+        await user.update({promoteBalance: addBNs(user.promoteBalance, coins)}, {transaction})
+      }
+    })
+    return true
   }
 }

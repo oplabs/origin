@@ -7,7 +7,11 @@ module.exports = (sequelize, DataTypes) => {
     flags: DataTypes.INTEGER,
     banned: DataTypes.BOOLEAN,
     hidden: DataTypes.BOOLEAN,
-    rank: DataTypes.INTEGER
+    rank: DataTypes.INTEGER,
+    balance: DataTypes.STRING,
+    lockedBalance: DataTypes.STRING,
+    promoteBalance: DataTypes.STRING,
+    lastOfferId: DataTypes.INTEGER
   }, {
     tableName: 'user_info'
   });
