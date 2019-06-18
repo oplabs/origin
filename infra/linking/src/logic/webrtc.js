@@ -136,15 +136,16 @@ class WebrtcSub {
   }
 
   sendBalance() {
+    const balances = {}
     if (this.user) {
-      const balances = {}
-      for (const key of ['balance', 'lockedBalance', 'promoteBalance', 'lastOfferId']) {
+      for (const key of ['balance', 'lockedBalance', 'promoteBalance']) {
         if (this.user[key] && this.user[key] != '0') {
           balances[key] = this.user[key]
         }
       }
-      this.sendMsg({balances})
+      balances.lastOfferId = this.user.lastOfferId
     }
+    this.sendMsg({balances})
   }
 
   async setUserInfo() {
@@ -155,8 +156,8 @@ class WebrtcSub {
         this.banned = true
       }
       this.userInfo = user.info
-      this.sendBalance()
     }
+    this.sendBalance()
     // set active only after user info is gotten
     this.setActive()
   }
@@ -166,7 +167,7 @@ class WebrtcSub {
   }
 
   getMinCost() {
-    return web3.utils.toWei((this.userInfo && this.userInfo.minCost) || '0.01')
+    return web3.utils.toWei((this.userInfo && this.userInfo.minCost && this.userInfo.minCost.toString()) || '0.01')
   }
 
   publish(channel, data, callback) {
@@ -679,8 +680,8 @@ class WebrtcSub {
   handleAdmin({admin}) {
     if (admin && ADMIN_ADDRESSES.includes(this.subscriberEthAddress)) {
       (async () => {
-        if (admin.getAllAddresses) {
-          this.sendMsg({allAddresses:await this.logic.getAllAddresses()})
+        if (admin.getAllUsers) {
+          this.sendMsg({allUsers:await this.logic.getAllUsers()})
         } else if (admin.ban) {
           const {ethAddress, banned} = admin.ban
           const userInfo = await db.UserInfo.findOne({ where: {ethAddress} })
@@ -701,7 +702,8 @@ class WebrtcSub {
           }
         } else if (admin.givePromote) {
           const {ethAddress, amount} = admin.givePromote
-          this.logic.givePromoteCoins(ethAddress, amount)
+          await this.logic.givePromoteCoins(ethAddress, amount)
+          this.logic.broadcastUpdated(ethAddress)
         }
       })()
       return true
@@ -787,20 +789,9 @@ export default class Webrtc {
     throw new Error(`We cannot auth the signature`)
   }
 
-  async getAllAddresses() {
-    const actives = []
-    const activeNotifcations = await db.WebrtcNotificationEndpoint.findAll({
-      include:[ {model:db.UserInfo, required:true} ],
-      where: { active:true}, order:[['lastOnline', 'DESC']], limit:100})
-
-    for (const notify of activeNotifcations) {
-      if (!actives.includes(notify.ethAddress))
-      {
-        actives.push(notify.ethAddress)
-      }
-    }
-
-    return actives
+  async getAllUsers() {
+    const users = await db.UserInfo.findAll({order:[['createdAt', 'DESC']]})
+    return users.map(u=> u.get({plain:true}))
   }
 
   async getActiveAddresses() {
@@ -889,7 +880,7 @@ export default class Webrtc {
   }
 
   async createOffer(offer, signature) {
-    const {createDate, promote, from, to, offerID, value, verifier} = offer
+    const {createDate, promote, from, to, offerID, value, verifier, offerTerms} = offer
 
     const currentDate = new Date()
     const tsDate = new Date(createDate)
@@ -958,10 +949,10 @@ export default class Webrtc {
           }
         }
 
-        const initInfo = {...offer}
+        const initInfo = {offerCreated:{listingID, offerID}, offerTerms}
         const contractOffer = { funding, promote, status:'1', totalValue:value, value, seller:to, buyer:from, verifier }
 
-        const offer = {
+        const offerData = {
           from,
           to,
           fullId,
@@ -971,11 +962,11 @@ export default class Webrtc {
           initInfo,
           active: true
         }
-        await db.WebrtcOffer.create(offer, {transaction})
+        await db.WebrtcOffer.create(offerData, {transaction})
         await user.update({...balanceUpdate, lastOfferId:offerID}, {transaction})
       })
       this.sendUpdated(from)
-      return {listingID, offerID}
+      return {listingID, offerID, transactionHash:'C'}
     } else {
       throw new Error("Cannot auth create offer")
     }
@@ -1038,7 +1029,7 @@ export default class Webrtc {
           const balanceUpdate = {}
 
           if (funding.promoteBalance) {
-            balanceUpdate.promoteBalance = addBNs(payer.promotebalance, funding.promoteBalance)
+            balanceUpdate.promoteBalance = addBNs(payer.promoteBalance, funding.promoteBalance)
           }
 
           if (funding.lockedBalance) {
@@ -1156,9 +1147,7 @@ export default class Webrtc {
     {
       if (!userInfo.banned && userInfo.info) {
         info = userInfo.info
-      } else {
-        data.banned_info = userInfo.info
-      }
+      } 
       data.hidden = userInfo.hidden
       data.banned = userInfo.banned
       data.reports = userInfo.flags

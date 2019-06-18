@@ -550,7 +550,7 @@ router.post('/webrtc-withdraw-offer', async (req, res) => {
 router.post('/webrtc-claim-offer', async (req, res) => {
   const { listingID, offerID, ipfsBytes, payout, signature } = req.body
 
-  const result = await webrtc.withdrawOffer(listingID, offerID, ipfsBytes, payout, signature)
+  const result = await webrtc.claimOffer(listingID, offerID, ipfsBytes, payout, signature)
   res.send(result)
 })
 
