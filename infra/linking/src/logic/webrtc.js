@@ -1503,8 +1503,7 @@ export default class Webrtc {
 
       const minUsdCost = (Number(account.minCost) * rate).toFixed(2)
       const name = account.name || accountAddress
-      //const title = `Talk with me for ${account.minCost} ETH ($${minUsdCost}) -- ${name}`
-      const title = `${name} is available to talk.`
+      const title = `Talk with me on Chai -- ${name}`
       const description = (account.description || '')
       const url = this.linker.getDappUrl() + "profile/" + accountAddress
       const imageUrl = account.icon && this.getIpfsUrl(account.icon)
