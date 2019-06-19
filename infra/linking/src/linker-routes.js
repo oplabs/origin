@@ -388,7 +388,8 @@ router.post('/wr-reg-ref/:accountAddress', async (req, res) => {
   try {
     const {accountAddress} = req.params
     const {attestUrl, referralUrl} = req.body
-    await webrtc.registerReferral(accountAddress, attestUrl, referralUrl, res)
+    const attest = await webrtc.registerReferral(accountAddress, attestUrl, referralUrl)
+    res.status(200).json(attest)
   } catch (e) {
     if (e instanceof AttestationError) {
       logger.error('Attestation error: ', e.message)

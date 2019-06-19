@@ -19,7 +19,7 @@ const ATTESTATION_ACCOUNT = process.env.ATTESTATION_ACCOUNT
 const DAPP_URL = `${process.env.DAPP_URL}`
 const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID
 
-const API_VERSION = "0.6"
+const API_VERSION = "0.7"
 
 /*
  * Deprecated but needed to support older versions of Origin Wallet

@@ -1201,7 +1201,21 @@ export default class Webrtc {
     return result
   }
 
-  async registerReferral(ethAddress, attestUrl, referralUrl, res) {
+  async forceAttest(ethAddress, referralUrl) {
+    const attestUrl = this.linker.getDappUrl() + "profile/" + ethAddress + "?attest"
+    const attest = await this.registerReferral(ethAddress, attestUrl, referralUrl, true)
+    const user = await db.UserInfo.findOne({ where: {ethAddress} })
+    if (user.info) {
+      const info = user.info
+      const attests = info.attests || []
+      attests.push(attest)
+      info.attests = attests
+      await user.update({info})
+      return true
+    }
+  }
+
+  async registerReferral(ethAddress, attestUrl, referralUrl, ignoreAttest) {
     const a = new URL(attestUrl)
     const paths = a.pathname.split("/")
     const query = querystring.parse(a.search.substring(1))
@@ -1219,7 +1233,7 @@ export default class Webrtc {
 
     if (!inbound || !inbound.verified) {
       // TODO: check the update time so that we don't hammer the sites
-      const {site, account, accountUrl, sanitizedUrl} = await extractAttestInfo(attestUrl, referralUrl)
+      const {site, account, accountUrl, sanitizedUrl} = await extractAttestInfo(attestUrl, referralUrl, ignoreAttest)
 
       if (site && account)
       {
@@ -1234,9 +1248,7 @@ export default class Webrtc {
           attested.update({info})
         }
         await db.InboundAttest.upsert({attestedSiteId:attested.id, ethAddress, url:referralUrl, verified:true, sanitizedUrl})
-        res.status = 200
-        res.json({ site, account, accountUrl, links:[sanitizedUrl] })
-        return
+        return { site, account, accountUrl, links:[sanitizedUrl] }
       }
     } else if (inbound && inbound.verified) {
       const attested = await db.AttestedSite.findByPk(inbound.attestedSiteId)
@@ -1248,14 +1260,12 @@ export default class Webrtc {
           attested.update({info})
         }
         const {site, account, accountUrl, verified} = attested
-        res.json({ site, account, accountUrl, links:[inbound.sanitizedUrl] })
-        return
+        return { site, account, accountUrl, links:[inbound.sanitizedUrl] }
       } else {
         throw new AttestationError('Can not find Attestation Site')
       }
     }
-
-    return {}
+    throw new AtttestationError("Invalid attestation")
   }
 
   async verifyAcceptOffer(ethAddress, ipfsHash, behalfFee, sig, listingID, offerID) {

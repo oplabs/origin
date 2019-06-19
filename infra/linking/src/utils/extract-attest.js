@@ -185,7 +185,7 @@ export async function extractAccountStat(accountUrl) {
   }
 }
 
-export default async function extractAttestInfo(attestUrl, referralUrl) {
+export default async function extractAttestInfo(attestUrl, referralUrl, ignoreAttest) {
   const site = findReferralSite(referralUrl)
   logger.info("found site:", site)
 
@@ -217,7 +217,7 @@ export default async function extractAttestInfo(attestUrl, referralUrl) {
       logger.info("stats:", {type, description, channelId, videoId})
 
       if (type.startsWith('video.') && videoId) {
-        if (description.includes(attestUrl)) {
+        if (ignoreAttest || description.includes(attestUrl)) {
           logger.info("Video verified")
           return {site, account:channelId, accountUrl:getYTAccountUrl(channelId), sanitizedUrl:getYTVideoUrl(videoId)}
         } else {
@@ -228,7 +228,7 @@ export default async function extractAttestInfo(attestUrl, referralUrl) {
         for(const link of $('li.channel-links-item').get())
         {
           const url = $(link).find('a').attr('href')
-          if (url == attestUrl) {
+          if (ignoreAttest || url == attestUrl) {
             const accountUrl = getYTAccountUrl(channelId)
             return {site, account:channelId, accountUrl, sanitizedUrl:accountUrl}
           }
@@ -259,7 +259,7 @@ export default async function extractAttestInfo(attestUrl, referralUrl) {
       const accountUrl = `https://www.instagram.com/${account}/`
       const sanitizedUrl = accountUrl
       //instagram strips out everything after the ?
-      if (instagramHtml.includes(attestUrl.replace(/\?.*/g, '')))
+      if (ignoreAttest || instagramHtml.includes(attestUrl.replace(/\?.*/g, '')))
       {
         return {site, account, accountUrl, sanitizedUrl}
       } else {
@@ -290,7 +290,7 @@ export default async function extractAttestInfo(attestUrl, referralUrl) {
       const accountUrl = `https://www.pinterest.com/${account}/`
       const sanitizedUrl = accountUrl
 
-      if (seeAlso === attestUrl)
+      if (ignoreAttest || seeAlso === attestUrl)
       {
         return {site, account, accountUrl, sanitizedUrl}
       } else {
