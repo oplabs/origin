@@ -166,11 +166,14 @@ export async function extractAccountStat(accountUrl) {
       }
     } else if (site == INSTAGRAM_SITE) {
       const description = $('meta[name="description"]').attr('content')
-      const matchResult = /^\s*(.*)\s*Followers.*/g.exec(description)
-      if (!matchResult || matchResult.length !== 2) {
+      const followersReg = /"edge_followed_by":{"count":([^}]+)}/g
+      let followers, result
+      while((result = followersReg.exec($.html())) !== null) {
+        followers = result[1]
+      }
+      if (!followers) {
         throw new AttestationError(`Can not fetch instagram followers from url: ${accountUrl}`)
       }
-      const followers = matchResult[1]
       return {description, followers}
     } else if (site == PINTEREST_SITE) {
       const description = $('meta[name="description"]').attr('content')
