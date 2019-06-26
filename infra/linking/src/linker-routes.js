@@ -5,6 +5,9 @@ import Linker from './logic/linker'
 import Hot from './logic/hot'
 import Webrtc from './logic/webrtc'
 import logger from 'logger'
+import { Readable } from 'stream'
+import ffmpeg from 'fluent-ffmpeg'
+import fs from 'fs'
 import AttestationError from 'utils/attestation-error'
 
 const router = express.Router()
@@ -440,6 +443,45 @@ router.post('/webrtc-user-info', async (req, res) => {
     res.status(500).json({ message: 'Unexpected error has occurred' })
   }
 })
+
+router.post('/webrtc-user-video/:ethAddress', async (req, res) => {
+  const {ethAddress} = req.params
+  if (!req.files || !req.files.video || !req.files.video.tempFilePath) {
+    return res.status(400).json({message:'No video file was uploaded.'});
+  }
+  console.log("written to temp file:", req.files.video)
+
+  const outfile = `/tmp/${ethAddress}-${Math.round(Math.random()*1000)}.mp4`
+
+  await new Promise((resolve, reject) => {
+    ffmpeg(req.files.video.tempFilePath)
+      .audioCodec('aac').videoCodec('libx264')
+      .on('error', (err)=> { 
+      console.log("Error processing video file:", err.message)
+      reject(err.message)
+    }).on('end', ()=> {
+      console.log('finish processing')
+      resolve(true)
+    }).save(outfile)
+  })
+
+  const ipfsHash = await linker.saveIpfs(fs.createReadStream(outfile))
+  //clean it all up
+  fs.unlink(outfile, (err)=> { if(err) { console.log("Cannot remove:", outfile)}})
+  fs.unlink(req.files.video.tempFilePath, (err)=> {if(err) {console.log("cannot remove:", req.files.video.tempFilePath)}})
+  res.send({ipfsHash})
+  /*
+  if (!req.files || !req.files.video || !req.files.video.tempFilePath) {
+    return res.status(400).json({message:'No video file was uploaded.'});
+  }
+  console.log("written to temp file:", req.files.video)
+
+  const ipfsHash = await linker.saveIpfs(ffmpeg(req.files.video.tempFilePath).inputFormat('mov').format('mp4').pipe())
+
+  console.log("ipfs hash for video file is:", ipfsHash)
+  */
+})
+
 
 router.get('/webrtc-user-info/:accountAddress/:watcherAddress?', async (req, res) => {
   const {accountAddress, watcherAddress} = req.params

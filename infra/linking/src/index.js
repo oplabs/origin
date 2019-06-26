@@ -8,6 +8,7 @@ import bodyParser from 'body-parser'
 import morgan from 'morgan'
 import 'express-async-errors'
 import linkerRoutes from './linker-routes'
+import fileUpload from 'express-fileupload'
 import logger from 'logger'
 
 const app = express()
@@ -18,6 +19,7 @@ app.use(useragent.express())
 app.use(cors({ origin: true, credentials: true }))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
+app.use(fileUpload({ limits : { filesize: 256 * 1024 * 1024}, useTempFiles : true, tempFileDir : '/tmp/'}))
 
 const port = 3008
 app.use('/api/wallet-linker', linkerRoutes)

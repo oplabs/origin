@@ -700,6 +700,10 @@ class Linker {
       }
     }
   }
+
+  async saveIpfs(file) {
+    return origin.ipfsService.saveFile(file)
+  }
 }
 
 export default Linker
