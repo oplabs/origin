@@ -451,7 +451,8 @@ router.post('/webrtc-user-video/:ethAddress', async (req, res) => {
   }
   console.log("written to temp file:", req.files.video)
 
-  const outfile = `/tmp/${ethAddress}-${Math.round(Math.random()*1000)}.mp4`
+  const videoHash = req.files.video.md5
+  const outfile = process.env.VIDEOS_DIRECTORY + `${ethAddress}-${videoHash}.mp4`
 
   await new Promise((resolve, reject) => {
     ffmpeg(req.files.video.tempFilePath)
@@ -465,21 +466,10 @@ router.post('/webrtc-user-video/:ethAddress', async (req, res) => {
     }).save(outfile)
   })
 
-  const ipfsHash = await linker.saveIpfs(fs.createReadStream(outfile))
   //clean it all up
-  fs.unlink(outfile, (err)=> { if(err) { console.log("Cannot remove:", outfile)}})
+  //fs.unlink(outfile, (err)=> { if(err) { console.log("Cannot remove:", outfile)}})
   fs.unlink(req.files.video.tempFilePath, (err)=> {if(err) {console.log("cannot remove:", req.files.video.tempFilePath)}})
-  res.send({ipfsHash})
-  /*
-  if (!req.files || !req.files.video || !req.files.video.tempFilePath) {
-    return res.status(400).json({message:'No video file was uploaded.'});
-  }
-  console.log("written to temp file:", req.files.video)
-
-  const ipfsHash = await linker.saveIpfs(ffmpeg(req.files.video.tempFilePath).inputFormat('mov').format('mp4').pipe())
-
-  console.log("ipfs hash for video file is:", ipfsHash)
-  */
+  res.send({videoHash})
 })
 
 
