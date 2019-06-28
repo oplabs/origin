@@ -7,6 +7,7 @@ import { getEthToUSDRate } from './../utils/currency'
 import { setTurnCred } from './../utils/turn'
 import { sha3_224 } from 'js-sha3'
 import querystring from 'querystring'
+import shortid from 'shortid'
 import _ from 'lodash'
 
 import AttestationError from 'utils/attestation-error'
@@ -413,22 +414,26 @@ class WebrtcSub {
                 return
               }
               offer.lastNotify = new Date()
-            } else if (!offer.lastNotify || (new Date() - offer.lastNotify) > 1000 * 60* 60 && !accepted) {
-              this.logic.sendNotificationMessage(ethAddress, `You have received an offer to talk for ${offer.amount} {offer.amountType.toUpperCase()} from ${this.getName()}.`, {listingID, offerID})
-              offer.lastNotify = new Date()
-            } else {
-              logger.info("Limit for sending offers sent.")
-              return
+            } else if( ethAddress) {
+              if (!offer.lastNotify || (new Date() - offer.lastNotify) > 1000 * 60* 60 && !accepted) {
+                this.logic.sendNotificationMessage(ethAddress, `You have received an offer to talk for ${offer.amount} ${offer.amountType.toUpperCase()} from ${this.getName()}.`, {listingID, offerID})
+                offer.lastNotify = new Date()
+              } else {
+                logger.info("Limit for sending offers sent.")
+                return
+              }
             }
             offer.fromNewMsg = false
             offer.toNewMsg = true
             offer.save()
 
             this.decorateOffer(subscribe.offer, offer)
-            subscribe.turn = this.getTurn(ethAddress, offer)
+            if (ethAddress) {
+              subscribe.turn = this.getTurn(ethAddress, offer)
 
-            // this is a good offer
-            this.publish(CHANNEL_PREFIX + ethAddress, {from:this.subscriberEthAddress, subscribe})
+              // this is a good offer
+              this.publish(CHANNEL_PREFIX + ethAddress, {from:this.subscriberEthAddress, subscribe})
+            }
             if (transactionHash) {
               this.sendOffer(offer)
             }
@@ -948,6 +953,10 @@ export default class Webrtc {
             }
           }
         }
+        let code
+        if (!to && offerTerms.useServerCode) {
+          code = shortid.generate()
+        }
 
         const initInfo = {offerCreated:{listingID, offerID}, offerTerms}
         const contractOffer = { funding, promote, status:'1', totalValue:value, value, seller:to, buyer:from, verifier }
@@ -962,6 +971,9 @@ export default class Webrtc {
           initInfo,
           active: true
         }
+        if (code) {
+          offerData.code = code
+        }
         await db.WebrtcOffer.create(offerData, {transaction})
         await user.update({...balanceUpdate, lastOfferId:offerID}, {transaction})
       })
@@ -972,7 +984,7 @@ export default class Webrtc {
     }
   }
 
-  async acceptOffer(acceptance, signature) {
+  async acceptOffer(acceptance, signature, args) {
     const {accept, offerID, listingID, from, createDate} = acceptance
     const currentDate = new Date()
     const tsDate = new Date(createDate)
@@ -987,6 +999,11 @@ export default class Webrtc {
     {
       const fullId = getFullId(listingID, offerID)
       const dbOffer = await db.WebrtcOffer.findOne({ where: {fullId}})
+
+      if (dbOffer.active && !dbOffer.to && args.code == offer.code) {
+        //if the codes match let's accept it
+        await dbOffer.update({to:from})
+      }
 
       if (dbOffer.to == from && dbOffer.contractOffer.status == '1') {
         const contractOffer = dbOffer.contractOffer
@@ -1268,20 +1285,32 @@ export default class Webrtc {
     throw new AtttestationError("Invalid attestation")
   }
 
-  async verifyAcceptOffer(ethAddress, ipfsHash, behalfFee, sig, listingID, offerID) {
+  async verifyAcceptOffer(ethAddress, ipfsHash, behalfFee, sig, listingID, offerID, args) {
     const offer = await this.getOffer(listingID, offerID)
 
     // it's an active offer to an url
-    if (offer.active && offer.to.startsWith("http")) {
-      //let's verify that it's from the right account
-      const attested = await db.AttestedSite.findOne({ where: {ethAddress, accountUrl:offer.to} })
-      if (attested && attested.verified) {
-        if (this.hot.checkMinFee(behalfFee)) {
-          return this.hot._submitMarketplace("verifyAcceptOfferOnBehalf", 
-            [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig.v, sig.r, sig.s])
+    if (offer.active) {
+      if (offer.to.startsWith("http")) {
+        //let's verify that it's from the right account
+        const attested = await db.AttestedSite.findOne({ where: {ethAddress, accountUrl:offer.to} })
+        if (attested && attested.verified) {
+          if (this.hot.checkMinFee(behalfFee)) {
+            return this.hot._submitMarketplace("verifyAcceptOfferOnBehalf", 
+              [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig.v, sig.r, sig.s])
+          }
         }
-
+      } else if (!offer.to) {
+        //ok it's an emptry address
+        //let's look at the terms
+        const offerTerms = offer.initInfo.offerTerms
+        if (offerTerms.useServerCode && args.code == offer.code) {
+          if (this.hot.checkMinFee(behalfFee)) {
+            return this.hot._submitMarketplace("verifyAcceptOfferOnBehalf", 
+              [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig.v, sig.r, sig.s])
+          }
+        }
       }
+
     }
     return {}
   }
@@ -1385,6 +1414,7 @@ export default class Webrtc {
     }
 
     const from = contractOffer.buyer
+    let code
 
     // grab info if available...
     let initInfo
@@ -1419,6 +1449,9 @@ export default class Webrtc {
         if (!to && offerTerms.toVerifiedUrl && contractOffer.verifier == this.hot.account.address) {
           to = offerTerms.toVerifiedUrl
         }
+        if (!to && offerTerms.useServerCode) {
+          code = shortid.generate()
+        }
         initInfo.offerTerms = offerTerms
       }
     }
@@ -1433,6 +1466,10 @@ export default class Webrtc {
       contractOffer,
       initInfo,
       active: intStatus == 1 || intStatus == 2
+    }
+
+    if (code) {
+      offer.code = code
     }
     await db.WebrtcOffer.upsert(offer)
     return db.WebrtcOffer.findOne({ where: {fullId}})

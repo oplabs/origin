@@ -33,9 +33,10 @@ const FIREBASE_DB_URL =
   process.env.FIREBASE_DB_URL || 'https://origin-wallet.firebaseio.com'
 
 class Linker {
-  constructor() {
+  constructor(hot) {
     this.messages = new MessageQueue()
     this.apiVersion = API_VERSION
+    this.hot = hot
 
     if (process.env.APNS_KEY_FILE) {
       this.apnProvider = new apn.Provider({
@@ -359,6 +360,7 @@ class Linker {
       perfModeEnabled,
       discoveryServerUrl,
       lnClientId: LINKEDIN_CLIENT_ID,
+      serverVerifier: this.hot && this.hot.account && this.hot.account.address,
       needUpdate
     }
   }

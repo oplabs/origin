@@ -30,8 +30,8 @@ const clientTokenHandler = (res, clientToken) => {
   }
 }
 
-const linker = new Linker()
 const hot = new Hot()
+const linker = new Linker()
 const webrtc = new Webrtc(linker, hot)
 
 router.post('/generate-code', async (req, res) => {
@@ -377,7 +377,10 @@ router.get('/webrtc-offer/:listingID/:offerID', async (req, res) => {
     const offer = await webrtc.getOffer(listingID, offerID)
 
     if (offer) {
-      res.send(offer.get({plain:true}))
+      const data = offer.get({plain:true})
+      //do not expose the code
+      delete data.code
+      res.send(data)
     } else {
       res.send({})
     }
@@ -492,9 +495,9 @@ router.get('/webrtc-user-info/:accountAddress/:watcherAddress?', async (req, res
 })
 
 router.post('/webrtc-verify-accept', async (req, res) => {
-  const {ethAddress, ipfsHash, behalfFee, sig, listingID, offerID} = req.body
+  const {ethAddress, ipfsHash, behalfFee, sig, listingID, offerID, args} = req.body
 
-  const result = await webrtc.verifyAcceptOffer(ethAddress, ipfsHash, behalfFee, sig, listingID, offerID)
+  const result = await webrtc.verifyAcceptOffer(ethAddress, ipfsHash, behalfFee, sig, listingID, offerID, args)
   res.send(result)
 })
 
@@ -567,9 +570,9 @@ router.post('/webrtc-create-offer', async (req, res) => {
 })
 
 router.post('/webrtc-accept-offer', async (req, res) => {
-  const { acceptance, signature } = req.body
+  const { acceptance, signature, args } = req.body
 
-  const result = await webrtc.acceptOffer(acceptance, signature)
+  const result = await webrtc.acceptOffer(acceptance, signature, args)
   res.send(result)
 })
 
