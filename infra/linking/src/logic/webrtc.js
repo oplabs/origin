@@ -469,9 +469,6 @@ class WebrtcSub {
                 return
               }
               offer.lastFromNotify = new Date()
-            } else {
-              logger.info("Call id required for accept.")
-              return
             }
 
             //we already read this offer
@@ -481,7 +478,9 @@ class WebrtcSub {
 
             //if we have a voucher from before send it
             this.decorateOffer(subscribe.accept, offer)
-            subscribe.turn = this.getTurn(ethAddress, offer)
+            if (subscribe.callId) {
+              subscribe.turn = this.getTurn(ethAddress, offer)
+            }
 
             this.publish(CHANNEL_PREFIX + ethAddress, {from:this.subscriberEthAddress, subscribe})
             if (transactionHash) {
@@ -1000,7 +999,7 @@ export default class Webrtc {
       const fullId = getFullId(listingID, offerID)
       const dbOffer = await db.WebrtcOffer.findOne({ where: {fullId}})
 
-      if (dbOffer.active && !dbOffer.to && args.code == offer.code) {
+      if (dbOffer.active && !dbOffer.to && args.code == dbOffer.code) {
         //if the codes match let's accept it
         await dbOffer.update({to:from})
       }
@@ -1355,7 +1354,7 @@ export default class Webrtc {
 
     if(offer.active && offer.contractOffer.verifier == this.hot.account.address){
       const recoveredAddress = await this.hot.recoverFinalize(toSignListingID(listingID), offerID, ipfsBytes, payout, verifyFee, sig)
-      return recoveredAddress == offer.seller || recoveredAddress == offer.initInfo.offerTerms.sideVerifier
+      return recoveredAddress == offer.from || recoveredAddress == offer.initInfo.offerTerms.sideVerifier
     }
   }
 
