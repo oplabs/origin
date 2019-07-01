@@ -18,7 +18,8 @@ module.exports = (sequelize, DataTypes) => {
       fromNewMsg:DataTypes.BOOLEAN,
       toNewMsg:DataTypes.BOOLEAN,
       lastNotify:DataTypes.DATE,
-      lastFromNotify:DataTypes.DATE
+      lastFromNotify:DataTypes.DATE,
+      code:DataTypes.STRING
     },
     {
       tableName: 'webrtc_offer'

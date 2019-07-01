@@ -1290,7 +1290,18 @@ export default class Webrtc {
 
     // it's an active offer to an url
     if (offer.active) {
-      if (offer.to.startsWith("http")) {
+      if (!offer.to) {
+        //ok it's an emptry address
+        //let's look at the terms
+        const offerTerms = offer.initInfo.offerTerms
+        if (offerTerms.useServerCode && args.code == offer.code) {
+          if (this.hot.checkMinFee(behalfFee)) {
+            console.log("Submitting to block chain :", [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig])
+            return this.hot._submitMarketplace("verifyAcceptOfferOnBehalf", 
+              [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig.v, sig.r, sig.s])
+          }
+        }
+      } else if (offer.to.startsWith("http")) {
         //let's verify that it's from the right account
         const attested = await db.AttestedSite.findOne({ where: {ethAddress, accountUrl:offer.to} })
         if (attested && attested.verified) {
@@ -1299,18 +1310,7 @@ export default class Webrtc {
               [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig.v, sig.r, sig.s])
           }
         }
-      } else if (!offer.to) {
-        //ok it's an emptry address
-        //let's look at the terms
-        const offerTerms = offer.initInfo.offerTerms
-        if (offerTerms.useServerCode && args.code == offer.code) {
-          if (this.hot.checkMinFee(behalfFee)) {
-            return this.hot._submitMarketplace("verifyAcceptOfferOnBehalf", 
-              [listingID, offerID, ipfsHash, behalfFee, ethAddress, sig.v, sig.r, sig.s])
-          }
-        }
-      }
-
+      }     
     }
     return {}
   }
@@ -1372,6 +1372,10 @@ export default class Webrtc {
   async getDbOffer(listingID, offerID) {
     const fullId = getFullId(listingID, offerID)
     return await db.WebrtcOffer.findOne({ where: {fullId}})
+  }
+
+  async getDBOfferByCode(code) {
+    return await db.WebrtcOffer.findOne({ where: {code}})
   }
 
   async getOffer(listingID, offerID, transactionHash, blockNumber, _dbOffer) {
@@ -1451,6 +1455,7 @@ export default class Webrtc {
         }
         if (!to && offerTerms.useServerCode) {
           code = shortid.generate()
+          console.log("Generating code as:", code)
         }
         initInfo.offerTerms = offerTerms
       }

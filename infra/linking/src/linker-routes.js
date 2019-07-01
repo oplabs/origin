@@ -390,6 +390,26 @@ router.get('/webrtc-offer/:listingID/:offerID', async (req, res) => {
   }
 })
 
+
+router.get('/webrtc-code-offer/:code', async (req, res) => {
+  try {
+    const {code} = req.params
+    const offer = await webrtc.getDBOfferByCode(code)
+
+    if (offer) {
+      const data = offer.get({plain:true})
+      res.send(data)
+    } else {
+      res.status(404).send({
+        message: 'Offer code not found'
+      })
+    }
+  } catch (e) {
+    logger.error('Internal server error: ', e.message)
+    res.status(500).json({ message: 'Unexpected error has occurred' })
+  }
+})
+
 router.post('/wr-reg-ref/:accountAddress', async (req, res) => {
   try {
     const {accountAddress} = req.params
