@@ -1589,8 +1589,8 @@ export default class Webrtc {
       if( imageUrl ) {
         account.iconSource = {uri:imageUrl}
       }
-      account.amountUsd = amountUsd
-      return createHtml({title, description, url, imageUrl, ogType, twitterType}, {code:offerCode, account, offer}, BUNDLE_PATH)
+      offer.amountUsd = amountUsd
+      return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
     } else {
       const ogType = "website"
       const twitterType = "summary"
