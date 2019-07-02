@@ -442,7 +442,7 @@ router.get('/webrtc-static/:path?/:pathAddress?', async (req, res) => {
   let accountAddress, offerCode
   if (path == "profile") {
     accountAddress = pathAddress
-  } else if (path = "req") {
+  } else if (path == "req") {
     offerCode = pathAddress
   }
   res.send(await webrtc.getPage(accountAddress, offerCode))
