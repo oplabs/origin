@@ -437,10 +437,15 @@ router.get('/webrtc-attests/:accountAddress', async (req, res) => {
   }
 })
 
-router.get('/webrtc-static/:pathAddress?', async (req, res) => {
-  const { pathAddress } = req.params
-  const accountAddress = req.query.p
-  res.send(await webrtc.getPage(pathAddress||accountAddress))
+router.get('/webrtc-static/:path?/:pathAddress?', async (req, res) => {
+  const { path, pathAddress } = req.params
+  let accountAddress, offerCode
+  if (path == "profile") {
+    accountAddress = pathAddress
+  } else if (path = "req") {
+    offerCode = pathAddress
+  }
+  res.send(await webrtc.getPage(accountAddress, offerCode))
 })
 
 router.get('/linkedin-authed', async (req, res) => {

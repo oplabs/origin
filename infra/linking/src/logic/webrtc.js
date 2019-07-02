@@ -1543,7 +1543,7 @@ export default class Webrtc {
     return `${this.linker.getIpfsGateway()}/ipfs/${hash}`
   }
 
-  async getPage(accountAddress) {
+  async getPage(accountAddress, offerCode) {
     const BUNDLE_PATH = process.env.BUNDLE_PATH || "/"
     const keywords = "video, chat, ethereum, facetoface"
     if (accountAddress && accountAddress.startsWith("0x"))
@@ -1567,6 +1567,30 @@ export default class Webrtc {
       }
       account.minUsdCost = minUsdCost
       return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account}, BUNDLE_PATH)
+    } else if (offerCode) { 
+      const rate = await this.getEthToUsdRate()
+      const offer = await this.getDBOfferByCode(offerCode)
+      const accountAddress = offer.from
+      const result = await this.getUserInfo(accountAddress)
+      const account = result.info
+
+      const eqAmount = offer.amountType == 'chai' ? Number(offer.amount) / 100.0 : Number(offer.amount)
+
+      const amountUsd = (offer.amount * rate).toFixed(2)
+      const name = account.name || accountAddress
+      const title = `Talk with me on Chai -- ${name}`
+      const description = (account.description || '')
+      const url = this.linker.getDappUrl() + "profile/" + accountAddress
+      const imageUrl = account.icon && this.getIpfsUrl(account.icon)
+      const ogType = "profile"
+      const twitterType = "summary_large_image"
+
+      // map in the iconSource
+      if( imageUrl ) {
+        account.iconSource = {uri:imageUrl}
+      }
+      account.amountUsd = amountUsd
+      return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
     } else {
       const ogType = "website"
       const twitterType = "summary"
