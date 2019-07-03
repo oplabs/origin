@@ -10,6 +10,8 @@ import ffmpeg from 'fluent-ffmpeg'
 import fs from 'fs'
 import AttestationError from 'utils/attestation-error'
 
+const APP_LINK_HOST = process.env.APP_LINK_HOST
+
 const router = express.Router()
 //doing this is a hack for detached routers...
 expressWs(router)
@@ -453,8 +455,16 @@ router.get('/linkedin-authed', async (req, res) => {
     // this is not submitted by our app.
     //
     // assume https because https is required for universal linking
-    const fullUrl = 'https://' + req.get('host') + req.originalUrl
-    res.send(`<!DOCTYPE html><html><body link="blue"><p><a href="${fullUrl}" target="_blank">Open in chai</a></p></body></html>`)
+    const host = req.get('host')
+    if (host != APP_LINK_HOST)
+    {
+      const fullUrl = 'https://' + APP_LINK_HOST + req.originalUrl
+      //redirect to the APP_LINK_HOST
+      res.send(`<!DOCTYPE html><html><script>window.location.href='${fullUrl}';</script></body></html>`)
+    } else {
+      const fullUrl = 'https://' + host + req.originalUrl
+      res.send(`<!DOCTYPE html><html><body link="blue"><p><a href="${fullUrl}" target="_blank">Open in chai</a></p></body></html>`)
+    }
   } else {
     const result = await webrtc.processLinkedinAuth(req.query)
     
