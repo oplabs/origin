@@ -625,4 +625,11 @@ router.post('/webrtc-claim-offer', async (req, res) => {
   res.send(result)
 })
 
+router.post('/webrtc-submit-withdraw', async (req, res) => {
+  const { ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature } = req.body
+
+  const result = await webrtc.submitWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature)
+  res.send(result)
+})
+
 export default router

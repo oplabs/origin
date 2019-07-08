@@ -3,6 +3,7 @@ import origin, { web3 } from './../services/origin'
 import db from './../models/'
 import extractAttestInfo, {extractAccountStat, extractLinkedin} from './../utils/extract-attest'
 import createHtml from './../utils/static-web'
+import emailSupport from './../utils/email-support'
 import { getEthToUSDRate } from './../utils/currency'
 import { setTurnCred } from './../utils/turn'
 import { sha3_224 } from 'js-sha3'
@@ -1662,4 +1663,39 @@ export default class Webrtc {
     })
     return true
   }
+
+  async emailWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo) {
+    const network = await web3.eth.net.getNetworkType()
+    const subject = `[${network}] ${ethAddress} have requested a withdraw of ${amountUsd}`
+    const text = `[${network}] ${ethAddress} have sent over ${amount} ${amountType} in order to withdraw $${amountUsd}. The transaction hashis ${transactionHash}. He would like to be paid via ${JSON.stringify(recipientInfo)}`
+    emailSupport('withdrawRequest@chai.video', subject, text)
+  }
+
+  async submitWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature) {
+    const msgData = {amount, amountType, amountUsd, transactionHash, recipientInfo}
+    const recovered = web3.eth.accounts.recover(JSON.stringify(msgData), signature)
+    if(ethAddress == recovered) {
+      if (amountType == 'eth') {
+        await db.Withdrawal.upsert({ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature})
+        this.emailWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo)
+        return true
+      } else if (amountType == 'chai') {
+        await db.sequelize.transaction(async (transaction) => {
+          const user = await db.UserInfo.findOne({ where: {ethAddress} }, {transaction})
+          const BNValue = web3.utils.toBN(web3.utils.toWei(amount))
+          const BNBalance = web3.utils.toBN(user.balance)
+          if (BNBalance.lt(BNValue)) {
+            throw new Error("You do not have enough chai to withdraw.")
+          }
+          const NewBalance = BNBalance.sub(BNValue)
+          await user.update({balance:NewBalance.toString()}, {transaction})
+          await db.Withdrawal.create({ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature}, {transaction})
+        })
+        this.emailWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo)
+        this.broadcastUpdated(ethAddress)
+        return true
+      }
+    }
+  }
+
 }

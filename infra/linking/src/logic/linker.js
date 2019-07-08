@@ -16,6 +16,7 @@ import apn from 'apn'
 import * as firebase from 'firebase-admin' // AKA "admin"
 
 const ATTESTATION_ACCOUNT = process.env.ATTESTATION_ACCOUNT
+const WITHDRAW_ACCOUNT = process.env.WITHDRAW_ACCOUNT
 const DAPP_URL = `${process.env.DAPP_URL}`
 const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID
 
@@ -361,6 +362,7 @@ class Linker {
       discoveryServerUrl,
       lnClientId: LINKEDIN_CLIENT_ID,
       serverVerifier: this.hot && this.hot.account && this.hot.account.address,
+      withdraw:WITHDRAW_ACCOUNT,
       needUpdate
     }
   }
