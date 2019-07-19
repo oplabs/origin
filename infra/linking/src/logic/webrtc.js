@@ -3,6 +3,7 @@ import origin, { web3 } from './../services/origin'
 import db from './../models/'
 import extractAttestInfo, {extractAccountStat, extractLinkedin} from './../utils/extract-attest'
 import createHtml from './../utils/static-web'
+import * as stripe from './../utils/stripe'
 import emailSupport from './../utils/email-support'
 import { getEthToUSDRate } from './../utils/currency'
 import { setTurnCred } from './../utils/turn'
@@ -41,6 +42,8 @@ const COIN = "coin"
 
 const CALL_COUNT_PREFIX = 'count.'
 const CALL_DECLINE_PREFIX = "decline."
+
+const USD_MIN_COST_RATE = 300
 
 const DECLINE_SECONDS = 5* 60 //decline lasts for 60 seconds
 
@@ -169,8 +172,13 @@ class WebrtcSub {
     return (this.userInfo && this.userInfo.name) || this.subscriberEthAddress
   }
 
-  getMinCost() {
-    return web3.utils.toWei((this.userInfo && this.userInfo.minCost && this.userInfo.minCost.toString()) || '0.01')
+  getMinCost(amountType) {
+    const minCost = (this.userInfo && this.userInfo.minCost) || 0.01
+    if (amountType == 'chai') {
+      return web3.utils.toWei((Number(minCost) * USD_MIN_COST_RATE).toString())
+    } else {
+      return web3.utils.toWei(minCost.toString())
+    }
   }
 
   publish(channel, data, callback) {
@@ -406,7 +414,7 @@ class WebrtcSub {
           // TODO: we need a price on this offer so need to load up profiles here as well
           if (offer && offer.active && !offer.rejected
             && offer.from == this.subscriberEthAddress && (!offer.to || offer.to == ethAddress) &&
-            (web3.utils.toBN(offer.contractOffer.totalValue).gte(this.getMinCost()) || accepted))
+            (web3.utils.toBN(offer.contractOffer.totalValue).gte(this.getMinCost(offer.amountType)) || accepted))
           {
             if (subscribe.callId && accepted) {
               // you can only call into accepted offers
@@ -418,7 +426,8 @@ class WebrtcSub {
               offer.lastNotify = new Date()
             } else if( ethAddress) {
               if (!offer.lastNotify || (new Date() - offer.lastNotify) > 1000 * 60* 60 && !accepted) {
-                this.logic.sendNotificationMessage(ethAddress, `You have received an offer to talk for ${offer.amount} ${offer.amountType.toUpperCase()} from ${this.getName()}.`, {listingID, offerID})
+                const usdAmount = this.logic.getUsdAmount(offer.amount, offer.amountType)
+                this.logic.sendNotificationMessage(ethAddress, `You have received an offer to talk for ${offer.amount} ${offer.amountType.toUpperCase()}($${usdAmount}) from ${this.getName()}.`, {listingID, offerID})
                 offer.lastNotify = new Date()
               } else {
                 logger.info("Limit for sending offers sent.")
@@ -886,13 +895,14 @@ export default class Webrtc {
   }
 
   async createOffer(offer, signature) {
-    const {createDate, promote, from, to, offerID, value, verifier, offerTerms} = offer
+    const {createDate, promote, from, to, offerID, value, verifier, offerTerms, tokenInfo } = offer
 
     const currentDate = new Date()
     const tsDate = new Date(createDate)
     const message = JSON.stringify(offer)
     const recovered = web3.eth.accounts.recover(message, signature)
     const listingID = CENTRALIZED_OFFER_PREFIX + from.slice(2)
+    const {stripeToken} = tokenInfo || {}
 
     if (offerID && recovered == from && currentDate - tsDate <  60 * 1000) //you got a minute to submit this thing
     {
@@ -902,15 +912,21 @@ export default class Webrtc {
 
       await db.sequelize.transaction(async (transaction) => {
         const user = await db.UserInfo.findOne({ where: {ethAddress:from } }, {transaction})
+        const userTo = await db.UserInfo.findOne({ where: {ethAddress:to } })
         const balanceUpdate = {}
         const funding = {}
         const BNValue = web3.utils.toBN(value)
+        const toName = (userTo && userTo.info && userTo.info.name) || to
+        let stripeCharge
 
         if (Number(offerID) < user.lastOfferId) {
           throw new Error(`OfferID ${offerID} not greater than last offerID ${user.lastOfferId}`)
         }
 
-        if (promote) {
+        if (stripeToken) {
+          const description = `Chai conversation with ${toName}`
+          stripeCharge = await stripe.createCharge(stripeToken, description, web3.utils.fromWei(BNValue))
+        } else if (promote) {
           const BNPromoteBalance = web3.utils.toBN(user.promoteBalance)
           if (BNPromoteBalance.lt(BNValue))
           {
@@ -961,6 +977,7 @@ export default class Webrtc {
 
         const initInfo = {offerCreated:{listingID, offerID}, offerTerms}
         const contractOffer = { funding, promote, status:'1', totalValue:value, value, seller:to, buyer:from, verifier }
+        
 
         const offerData = {
           from,
@@ -974,6 +991,13 @@ export default class Webrtc {
         }
         if (code) {
           offerData.code = code
+        }
+
+        if (stripeCharge) {
+          // store the stripe charge as part of the contract
+          offerData.ccInfo = {stripeCharge}
+          // expires in seven days
+          initInfo.expiresDate = (new Date( stripeCharge.created * 1000 + 7 * 24 * 3600 * 1000)).toISOString()
         }
         await db.WebrtcOffer.create(offerData, {transaction})
         await user.update({...balanceUpdate, lastOfferId:offerID}, {transaction})
@@ -1008,11 +1032,19 @@ export default class Webrtc {
 
       if (dbOffer.to == from && dbOffer.contractOffer.status == '1') {
         const contractOffer = dbOffer.contractOffer
+        const {stripeCharge} = dbOffer.ccInfo || {}
+        const ccInfo = dbOffer.ccInfo
+
+        //actually capture and lock in the charge
+        if (stripeCharge) {
+          ccInfo.capturedStripeCharge = await stripe.captureCharge(stripeCharge.id)
+        }
+
         //set as accepted
         contractOffer.status = '2'
         //ensure the reciever actually exists
         await db.UserInfo.upsert({ethAddress:from})
-        await dbOffer.update({contractOffer})
+        await dbOffer.update({contractOffer, ccInfo})
         return {listingID, offerID, transactionHash:'C'}
       }
     } else {
@@ -1039,6 +1071,8 @@ export default class Webrtc {
         const dbOffer = await db.WebrtcOffer.findOne({ where: {fullId}}, {transaction})
         if (dbOffer.from == from && dbOffer.contractOffer.status == '1') {
           const contractOffer = dbOffer.contractOffer
+          const {stripeCharge} = dbOffer.ccInfo || {}
+          const ccInfo = dbOffer.ccInfo
           //set as accepted
           contractOffer.status = null
           const funding = contractOffer.funding
@@ -1058,8 +1092,12 @@ export default class Webrtc {
             balanceUpdate.balance = addBNs(payer.balance, funding.balance)
           }
 
+          if (stripeCharge) {
+            ccInfo.stripeRefund = await stripe.refundCharge(stripeCharge.id, undefined, true)
+          }
+
           await payer.update(balanceUpdate, {transaction})
-          await dbOffer.update({active:false, contractOffer}, {transaction})
+          await dbOffer.update({active:false, contractOffer, ccInfo}, {transaction})
         } else {
           throw new Error("invalid offer to withdraw")
         }
@@ -1136,6 +1174,15 @@ export default class Webrtc {
         BNRefund = this._consumeRefundBalance(BNRefund, payer, funding, payerBalanceUpdate, 'lockedBalance')
         BNRefund = this._consumeRefundBalance(BNRefund, payer, funding, payerBalanceUpdate, 'promoteBalance')
 
+        const {stripeCharge} = dbOffer.ccInfo || {}
+        const ccInfo = dbOffer.ccInfo
+
+        if (stripeCharge) {
+          ccInfo.stripeRefund = await stripe.refundCharge(stripeCharge.id, web3.utils.fromWei(BNRefund))
+          //consume it all
+          BNRefund = web3.utils.toBN('0')
+        }
+
         if (!BNRefund.isZero()) {
           throw new Error(`We cannot consume the entire refund ${funding}  refund: ${BNRefund.toString()}`)
         }
@@ -1146,7 +1193,7 @@ export default class Webrtc {
         contractOffer.status = null
         //collected via server
         contractOffer.collected = true
-        await dbOffer.update({active:false, contractOffer}, {transaction})
+        await dbOffer.update({active:false, contractOffer, ccInfo}, {transaction})
       } else {
         throw new Error("invalid offer to claim")
       }
@@ -1519,7 +1566,9 @@ export default class Webrtc {
 
   async getDisplayOffer(listingID, offerID) {
     const offer = await this.getOffer(listingID, offerID)
-    return offer.get({plain:true})
+    const o = offer.get({plain:true})
+    delete o.ccInfo
+    return o
   }
 
   async getOffers(ethAddress, options) {
@@ -1530,19 +1579,36 @@ export default class Webrtc {
       [db.Sequelize.Op.or]: [ {to:ethAddress}, {from:ethAddress} ] }})
 
     if (ignoreBlockchain) {
-      return offers.map(o => o.get({plain:true}))
+      return offers.map(o => { 
+        const offer = o.get({plain:true})
+        delete offer.ccInfo
+        return offer
+      })
     } else {
       const updatedOffers = await Promise.all(offers.map(o => {
         const {listingID, offerID} = splitFullId(o.fullId)
         return this.getOffer(listingID, offerID, undefined, undefined, o)
       }))
 
-      return updatedOffers.map(o=> o.get({plain:true}))
+      return updatedOffers.map(o=> { 
+        const offer = o.get({plain:true})
+        delete offer.ccInfo
+        return offer
+      })
     }
   }
 
   getIpfsUrl(hash) {
     return `${this.linker.getIpfsGateway()}/ipfs/${hash}`
+  }
+
+  async getUsdAmount(amount, amountType) {
+    if (amountType == 'chai') {
+      return amount
+    } else if (amountType == 'eth') {
+      const rate = await this.getEthToUsdRate()
+      return amount * rate
+    }
   }
 
   async getPage(accountAddress, offerCode) {
@@ -1555,6 +1621,7 @@ export default class Webrtc {
       const account = result.info
 
       const minUsdCost = (Number(account.minCost) * rate).toFixed(2)
+      const minChaiUsdCost = this.getUsdAmount(account.minCost, 'chai').toFixed(2)
       const name = account.name || accountAddress
       const title = `Talk with me on Chai -- ${name}`
       const description = (account.description || '')
@@ -1568,17 +1635,17 @@ export default class Webrtc {
         account.iconSource = {uri:imageUrl}
       }
       account.minUsdCost = minUsdCost
+      account.minChaiUsdCost = minChaiUsdCost
       return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account}, BUNDLE_PATH)
     } else if (offerCode) { 
       const rate = await this.getEthToUsdRate()
       const offer = (await this.getDBOfferByCode(offerCode)).get({plain:true})
+      delete offer.ccInfo
       const accountAddress = offer.from
       const result = await this.getUserInfo(accountAddress)
       const account = result.info
 
-      const eqAmount = offer.amountType == 'chai' ? Number(offer.amount) / 100.0 : Number(offer.amount)
-
-      const amountUsd = (eqAmount * rate).toFixed(2)
+      const amountUsd = (offer.amountType == 'chai' ?  Number(offer.amount) : Number(offer.amount) * rate).toFixed(2)
       const name = account.name || accountAddress
       const title = `Talk with me on Chai -- ${name}`
       const description = (account.description || '')
