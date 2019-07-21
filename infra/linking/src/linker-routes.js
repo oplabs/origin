@@ -477,7 +477,7 @@ router.post('/webrtc-user-info', async (req, res) => {
     const { ipfsHash } = req.body
     res.send(await webrtc.submitUserInfo(ipfsHash))
   } catch (e) {
-    logger.error('Internal server error: ', e.message)
+    logger.error('Internal server error: ', e)
     res.status(500).json({ message: 'Unexpected error has occurred' })
   }
 })
