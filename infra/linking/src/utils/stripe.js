@@ -15,7 +15,8 @@ export async function captureCharge(chargeId) {
   return charge
 }
 
-export async function refundCharge(chargeId, amount, request) {
+export async function refundCharge(chargeId, amountUsd, request) {
+  const amount = amountUsd ? Math.round(100 * amountUsd) : undefined
   const reason = request ? 'requested_by_customer' : null
   const refund = await stripe.refunds.create({charge:chargeId, amount, reason})
   return refund

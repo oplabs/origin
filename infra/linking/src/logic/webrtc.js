@@ -1177,7 +1177,7 @@ export default class Webrtc {
         const {stripeCharge} = dbOffer.ccInfo || {}
         const ccInfo = dbOffer.ccInfo
 
-        if (stripeCharge) {
+        if (stripeCharge && !BNRefund.isZero()) {
           ccInfo.stripeRefund = await stripe.refundCharge(stripeCharge.id, web3.utils.fromWei(BNRefund))
           //consume it all
           BNRefund = web3.utils.toBN('0')
