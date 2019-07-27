@@ -1620,8 +1620,9 @@ export default class Webrtc {
       const result = await this.getUserInfo(accountAddress)
       const account = result.info
 
-      const minUsdCost = (Number(account.minCost) * rate).toFixed(2)
-      const minChaiUsdCost = this.getUsdAmount(account.minCost, 'chai').toFixed(2)
+      const minCost = Number(account.minCost || 0.05)
+      const minUsdCost = (minCost * rate).toFixed(2)
+      const minChaiUsdCost = this.getUsdAmount(minCost * USD_MIN_COST_RATE, 'chai').toFixed(2)
       const name = account.name || accountAddress
       const title = `Talk with me on Chai -- ${name}`
       const description = (account.description || '')
