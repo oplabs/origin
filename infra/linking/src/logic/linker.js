@@ -19,6 +19,7 @@ const ATTESTATION_ACCOUNT = process.env.ATTESTATION_ACCOUNT
 const WITHDRAW_ACCOUNT = process.env.WITHDRAW_ACCOUNT
 const DAPP_URL = `${process.env.DAPP_URL}`
 const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID
+const STRIPE_PK = process.env.STRIPE_PK
 
 const API_VERSION = "0.7"
 
@@ -363,6 +364,7 @@ class Linker {
       lnClientId: LINKEDIN_CLIENT_ID,
       serverVerifier: this.hot && this.hot.account && this.hot.account.address,
       withdraw:WITHDRAW_ACCOUNT,
+      stripePK:STRIPE_PK,
       needUpdate
     }
   }
