@@ -43,7 +43,7 @@ const COIN = "coin"
 const CALL_COUNT_PREFIX = 'count.'
 const CALL_DECLINE_PREFIX = "decline."
 
-const USD_MIN_COST_RATE = 300
+const USD_MIN_COST_RATE = 100
 
 const DECLINE_SECONDS = 5* 60 //decline lasts for 60 seconds
 
