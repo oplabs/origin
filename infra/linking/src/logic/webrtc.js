@@ -47,6 +47,9 @@ const USD_MIN_COST_RATE = 100
 
 const DECLINE_SECONDS = 5* 60 //decline lasts for 60 seconds
 
+// give everyone 5 dollars initially
+const INITIAL_REWARD = web3.utils.toWei('5').toString()
+
 function getFullId(listingID, offerID) {
   return `${listingID}-${offerID}`
 }
@@ -887,8 +890,25 @@ export default class Webrtc {
       logger.info("submitting ipfsHash:", ipfsHash)
       const rank = await this.getRank(info.address, info)
       await db.UserInfo.upsert({ethAddress:info.address, ipfsHash, info, rank})
-      this.broadcastUpdated(info.address)
 
+      await db.sequelize.transaction(async (transaction) => {
+        const ethAddress = info.address
+        const user = await db.UserInfo.findOne({ where: {ethAddress } }, {transaction})
+        const giveRewards = info.icon && info.name
+        if (!user) {
+          const rewardsBalance = giveRewards ? INITIAL_REWARD : undefined
+          await db.UserInfo.create({ethAddress:info.address, ipfsHash, info, rank, rewardsBalance, lockedBalance:rewardsBalance})
+        } else {
+          const updateData = {ipfsHash, info, rank}
+
+          if (web3.utils.toBN(user.rewardsBalance).isZero() && giveRewards) {
+            updateData.rewardsBalance = INITIAL_REWARD
+            updateData.lockedBalance = web3.utils.toBN(user.lockedBalance).add(web3.utils.toBN(INITIAL_REWARD)).toString()
+          }
+          await user.update(updateData, {transaction})
+        }
+      })
+      this.broadcastUpdated(info.address)
       return true
     }
     return false

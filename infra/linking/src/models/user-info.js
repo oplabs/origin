@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
     balance: DataTypes.STRING,
     lockedBalance: DataTypes.STRING,
     promoteBalance: DataTypes.STRING,
+    rewardsBalance: DataTypes.STRING,
     lastOfferId: DataTypes.INTEGER
   }, {
     tableName: 'user_info'
