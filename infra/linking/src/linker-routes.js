@@ -475,7 +475,8 @@ router.get('/linkedin-authed', async (req, res) => {
 router.post('/webrtc-user-info', async (req, res) => {
   try {
     const { ipfsHash } = req.body
-    res.send(await webrtc.submitUserInfo(ipfsHash))
+    const ip = req.ip
+    res.send(await webrtc.submitUserInfo(ipfsHash, ip))
   } catch (e) {
     logger.error('Internal server error: ', e)
     res.status(500).json({ message: 'Unexpected error has occurred' })

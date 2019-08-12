@@ -20,6 +20,7 @@ app.use(cors({ origin: true, credentials: true }))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(fileUpload({ limits : { filesize: 256 * 1024 * 1024}, useTempFiles : true, tempFileDir : '/tmp/'}))
+app.set('trust proxy', true)
 
 const port = 3008
 app.use('/api/wallet-linker', linkerRoutes)

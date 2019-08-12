@@ -882,7 +882,7 @@ export default class Webrtc {
     return rank
   }
 
-  async submitUserInfo(ipfsHash) {
+  async submitUserInfo(ipfsHash, ip) {
     const info = await origin.ipfsService.loadObjFromFile(ipfsHash)
     // we should verify the signature for this
     if (await this.hot.verifyProfile(info))
@@ -897,13 +897,14 @@ export default class Webrtc {
         const giveRewards = info.icon && info.name
         if (!user) {
           const rewardsBalance = giveRewards ? INITIAL_REWARD : undefined
-          await db.UserInfo.create({ethAddress:info.address, ipfsHash, info, rank, rewardsBalance, lockedBalance:rewardsBalance})
+          await db.UserInfo.create({ethAddress:info.address, ipfsHash, info, rank, rewardsBalance, lockedBalance:rewardsBalance, rewardsIp:ip})
         } else {
           const updateData = {ipfsHash, info, rank}
 
           if (web3.utils.toBN(user.rewardsBalance).isZero() && giveRewards) {
             updateData.rewardsBalance = INITIAL_REWARD
             updateData.lockedBalance = web3.utils.toBN(user.lockedBalance).add(web3.utils.toBN(INITIAL_REWARD)).toString()
+            updateData.rewardsIp = ip
           }
           await user.update(updateData, {transaction})
         }
