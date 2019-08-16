@@ -818,7 +818,7 @@ export default class Webrtc {
     {
       const activeNotifcations = await db.WebrtcNotificationEndpoint.findAll({
         include:[ {model:db.UserInfo, required:true, attributes:["info", [db.Sequelize.literal('"WebrtcNotificationEndpoint"."last_online" + "UserInfo"."rank" * interval \'1 second\''), 'lastOnlineRank']]} ],
-        where: { active:true, '$UserInfo.flags$':{[db.Sequelize.Op.lt]:3}, '$UserInfo.banned$':{[db.Sequelize.Op.ne]:true}, '$UserInfo.hidden$':{[db.Sequelize.Op.ne]:true} }, order:[[db.Sequelize.literal('"UserInfo.lastOnlineRank"'), 'DESC']], limit:100})
+        where: { active:true, '$UserInfo.flags$':{[db.Sequelize.Op.lt]:3}, '$UserInfo.banned$':{[db.Sequelize.Op.ne]:true}, '$UserInfo.hidden$':{[db.Sequelize.Op.ne]:true} }, order:[[db.Sequelize.literal('"UserInfo.lastOnlineRank"'), 'DESC']], limit:200})
 
       for (const notify of activeNotifcations) {
         if (!actives.includes(notify.ethAddress) && notify.UserInfo.info && notify.UserInfo.info.icon)
@@ -830,7 +830,7 @@ export default class Webrtc {
       actives.push(...Object.keys(this.activeAddresses))
       const activeNotifcations = await db.WebrtcNotificationEndpoint.findAll({
         include:[ {model:db.UserInfo, required:false} ],
-        where: { active:true, '$UserInfo.banned$':{[db.Sequelize.Op.ne]:true} }, order:[['lastOnline', 'DESC']], limit:50})
+        where: { active:true, '$UserInfo.banned$':{[db.Sequelize.Op.ne]:true} }, order:[['lastOnline', 'DESC']], limit:100})
 
       for (const notify of activeNotifcations) {
         if (!actives.includes(notify.ethAddress))
@@ -1745,9 +1745,9 @@ export default class Webrtc {
     await db.sequelize.transaction(async (transaction) => {
       const user= await db.UserInfo.findOne({ where: {ethAddress} }, {transaction})
       if (!user) {
-        await db.UserInfo.create({ethAddress, promoteBalance: coins.toString()}, {transaction})
+        await db.UserInfo.create({ethAddress, lockedBalance: coins.toString()}, {transaction})
       } else {
-        await user.update({promoteBalance: addBNs(user.promoteBalance, coins)}, {transaction})
+        await user.update({promoteBalance: addBNs(user.lockedBalance, coins)}, {transaction})
       }
     })
     return true
