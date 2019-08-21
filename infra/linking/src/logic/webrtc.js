@@ -1747,7 +1747,7 @@ export default class Webrtc {
       if (!user) {
         await db.UserInfo.create({ethAddress, lockedBalance: coins.toString()}, {transaction})
       } else {
-        await user.update({promoteBalance: addBNs(user.lockedBalance, coins)}, {transaction})
+        await user.update({lockedBalance: addBNs(user.lockedBalance, coins)}, {transaction})
       }
     })
     return true
