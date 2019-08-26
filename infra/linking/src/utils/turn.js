@@ -16,6 +16,6 @@ function generateCredential(_user, _realm, _pass) {
 
 export function setTurnCred(user, pass) {
   const cred = generateCredential(user, realm, pass)
-  redis.set(`turn/realm/${realm}/user/${user}/key`, cred, 'EX', 3600) //set for 60 minutes
+  redis.set(`turn/realm/${realm}/user/${user}/key`, cred, 'EX', 1800) //set for 30 minutes
 }
 
