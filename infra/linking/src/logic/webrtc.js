@@ -1656,6 +1656,12 @@ export default class Webrtc {
       if( imageUrl ) {
         account.iconSource = {uri:imageUrl}
       }
+
+      const videoUrl = account.video && this.getIpfsUrl(account.video)
+      if (videoUrl) {
+        account.videoSource = {uri:videoUrl}
+      }
+
       account.minUsdCost = minUsdCost
       account.minChaiUsdCost = minChaiUsdCost
       return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account}, BUNDLE_PATH)
@@ -1679,6 +1685,11 @@ export default class Webrtc {
       // map in the iconSource
       if( imageUrl ) {
         account.iconSource = {uri:imageUrl}
+      }
+
+      const videoUrl = account.video && this.getIpfsUrl(account.video)
+      if (videoUrl) {
+        account.videoSource = {uri:videoUrl}
       }
       offer.amountUsd = amountUsd
       return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
