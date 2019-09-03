@@ -1654,8 +1654,6 @@ export default class Webrtc {
       const description = (account.description || '')
       const url = this.linker.getDappUrl() + "profile/" + accountAddress
       const imageUrl = account.icon && this.getIpfsUrl(account.icon)
-      const ogType = "profile"
-      const twitterType = "summary_large_image"
 
       // map in the iconSource
       if( imageUrl ) {
@@ -1666,10 +1664,13 @@ export default class Webrtc {
       if (videoUrl) {
         account.videoSource = {uri:videoUrl}
       }
+      const ogType = videoUrl ? "video.movie":"profile"
+      const twitterType = videoUrl ? "player":"summary_large_image"
+      const playerUrl = videoUrl && (this.linker.getDappUrl() + "/embed.html?v=" + videoUrl)
 
       account.minUsdCost = minUsdCost
       account.minChaiUsdCost = minChaiUsdCost
-      return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account}, BUNDLE_PATH)
+      return createHtml({title, description, url, imageUrl, videoUrl, playerUrl, ogType, twitterType}, {account}, BUNDLE_PATH)
     } else if (offerCode) { 
       const rate = await this.getEthToUsdRate()
       const offer = (await this.getDBOfferByCode(offerCode)).get({plain:true})
@@ -1684,8 +1685,6 @@ export default class Webrtc {
       const description = (account.description || '')
       const url = this.linker.getDappUrl() + "profile/" + accountAddress
       const imageUrl = account.icon && this.getIpfsUrl(account.icon)
-      const ogType = "profile"
-      const twitterType = "summary_large_image"
 
       // map in the iconSource
       if( imageUrl ) {
@@ -1696,8 +1695,12 @@ export default class Webrtc {
       if (videoUrl) {
         account.videoSource = {uri:videoUrl}
       }
+
+      const ogType = videoUrl ? "video.movie":"profile"
+      const twitterType = videoUrl ? "player":"summary_large_image"
+      const playerUrl = videoUrl && (this.linker.getDappUrl() + "/embed.html?v=" + videoUrl)
       offer.amountUsd = amountUsd
-      return createHtml({title, description, url, imageUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
+      return createHtml({title, description, url, imageUrl, videoUrl, playerUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
     } else {
       const ogType = "website"
       const twitterType = "summary"

@@ -35,7 +35,7 @@ function addAllMetas(metas, name, content) {
   metas.push(twitterMeta(name, content))
 }
 
-export default function createHtml({title, description, url, imageUrl, keywords, ogType, twitterType} = meta, state, bundlePath) {
+export default function createHtml({title, description, url, imageUrl, videoUrl, playerUrl, keywords, ogType, twitterType} = meta, state, bundlePath) {
   const metas = []
 
   if (title) {
@@ -61,10 +61,22 @@ export default function createHtml({title, description, url, imageUrl, keywords,
   if (ogType) {
     metas.push(ogMeta("type", ogType))
   }
-
   if (twitterType) {
     metas.push(twitterMeta("type", twitterType))
   }
 
+  if(videoUrl) {
+    metas.push(ogMeta("video", videoUrl))
+    metas.push(ogMeta("video:type", "video/mp4"))
+    metas.push(ogMeta("video:width", "480"))
+    metas.push(ogMeta("video:height", "480"))
+
+    metas.push(twitterMeta("player", playerUrl))
+    metas.push(twitterMeta("player:stream", videoUrl))
+    metas.push(twitterMeta("player:width", "480"))
+    metas.push(twitterMeta("player:height", "480"))
+  }
+
+ 
   return HTML(metas, title, state, bundlePath)
 }
