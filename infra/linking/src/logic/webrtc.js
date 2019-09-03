@@ -1666,7 +1666,7 @@ export default class Webrtc {
       }
       const ogType = videoUrl ? "video.movie":"profile"
       const twitterType = videoUrl ? "player":"summary_large_image"
-      const playerUrl = videoUrl && (this.linker.getDappUrl() + "/embed.html?v=" + videoUrl)
+      const playerUrl = videoUrl && (this.linker.getDappUrl() + "embed.html?v=" + videoUrl)
 
       account.minUsdCost = minUsdCost
       account.minChaiUsdCost = minChaiUsdCost
@@ -1698,7 +1698,7 @@ export default class Webrtc {
 
       const ogType = videoUrl ? "video.movie":"profile"
       const twitterType = videoUrl ? "player":"summary_large_image"
-      const playerUrl = videoUrl && (this.linker.getDappUrl() + "/embed.html?v=" + videoUrl)
+      const playerUrl = videoUrl && (this.linker.getDappUrl() + "embed.html?v=" + videoUrl)
       offer.amountUsd = amountUsd
       return createHtml({title, description, url, imageUrl, videoUrl, playerUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
     } else {
