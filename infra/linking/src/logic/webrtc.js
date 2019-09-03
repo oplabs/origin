@@ -1657,7 +1657,7 @@ export default class Webrtc {
         account.iconSource = {uri:imageUrl}
       }
 
-      const videoUrl = account.video && this.getIpfsUrl(account.video)
+      const videoUrl = account.video && this.getIpfsUrl(origin.contractService.getIpfsHashFromBytes32(account.video))
       if (videoUrl) {
         account.videoSource = {uri:videoUrl}
       }
@@ -1687,7 +1687,7 @@ export default class Webrtc {
         account.iconSource = {uri:imageUrl}
       }
 
-      const videoUrl = account.video && this.getIpfsUrl(account.video)
+      const videoUrl = account.video && this.getIpfsUrl(origin.contractService.getIpfsHashFromBytes32(account.video))
       if (videoUrl) {
         account.videoSource = {uri:videoUrl}
       }
