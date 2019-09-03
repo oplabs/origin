@@ -1623,6 +1623,11 @@ export default class Webrtc {
     return `${this.linker.getIpfsGateway()}/ipfs/${hash}`
   }
 
+  getVideoUrl(address, hash) {
+    return `${this.linker.getDappUrl()}/videos/${address}-${hash}.mp4`
+
+  }
+
   async getUsdAmount(amount, amountType) {
     if (amountType == 'chai') {
       return amount
@@ -1657,7 +1662,7 @@ export default class Webrtc {
         account.iconSource = {uri:imageUrl}
       }
 
-      const videoUrl = account.video && this.getIpfsUrl(origin.contractService.getIpfsHashFromBytes32("0x" + account.video))
+      const videoUrl = account.video && this.getVideoUrl(accountAddress, account.video)
       if (videoUrl) {
         account.videoSource = {uri:videoUrl}
       }
@@ -1687,7 +1692,7 @@ export default class Webrtc {
         account.iconSource = {uri:imageUrl}
       }
 
-      const videoUrl = account.video && this.getIpfsUrl(origin.contractService.getIpfsHashFromBytes32("0x" + account.video))
+      const videoUrl = account.video && this.getVideoUrl(accountAddress, account.video)
       if (videoUrl) {
         account.videoSource = {uri:videoUrl}
       }
