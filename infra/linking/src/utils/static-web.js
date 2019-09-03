@@ -62,7 +62,7 @@ export default function createHtml({title, description, url, imageUrl, videoUrl,
     metas.push(ogMeta("type", ogType))
   }
   if (twitterType) {
-    metas.push(twitterMeta("type", twitterType))
+    metas.push(twitterMeta("card", twitterType))
   }
 
   if(videoUrl) {
