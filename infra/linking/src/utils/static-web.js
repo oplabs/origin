@@ -68,13 +68,13 @@ export default function createHtml({title, description, url, imageUrl, videoUrl,
   if(videoUrl) {
     metas.push(ogMeta("video", videoUrl))
     metas.push(ogMeta("video:type", "video/mp4"))
-    //metas.push(ogMeta("video:width", "480"))
-    //metas.push(ogMeta("video:height", "480"))
+    metas.push(ogMeta("video:width", "436"))
+    metas.push(ogMeta("video:height", "436"))
 
     metas.push(twitterMeta("player", playerUrl))
     metas.push(twitterMeta("player:stream", videoUrl))
-    //metas.push(twitterMeta("player:width", "480"))
-    //metas.push(twitterMeta("player:height", "480"))
+    metas.push(twitterMeta("player:width", "436"))
+    metas.push(twitterMeta("player:height", "436"))
   }
 
  
