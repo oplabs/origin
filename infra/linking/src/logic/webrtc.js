@@ -450,6 +450,9 @@ class WebrtcSub {
             }
             if (transactionHash) {
               this.sendOffer(offer)
+              this.emailOffer(offer, "New")
+            } else {
+              this.emailOffer(offer, "Sender call")
             }
           }
         } else if (accept) {
@@ -499,6 +502,9 @@ class WebrtcSub {
             this.publish(CHANNEL_PREFIX + ethAddress, {from:this.subscriberEthAddress, subscribe})
             if (transactionHash) {
               this.sendOffer(offer)
+              this.emailOffer(offer, "Accepted")
+            } else {
+              this.emailOffer(offer, "Talent call")
             }
           }
         }
@@ -550,6 +556,7 @@ class WebrtcSub {
         const {listingID, offerID} = collected.offer
         const offer = await this.logic.getOffer(listingID, offerID)
         logger.info("collecting offer:", offer)
+        this.emailOffer(offer, "Collected")
 
         if (!offer.active && offer.to == this.subscriberEthAddress)
         {
@@ -1215,6 +1222,7 @@ export default class Webrtc {
         //collected via server
         contractOffer.collected = true
         await dbOffer.update({active:false, contractOffer, ccInfo}, {transaction})
+        this.emailOffer(offer, "Collect")
       } else {
         throw new Error("invalid offer to claim")
       }
@@ -1408,12 +1416,14 @@ export default class Webrtc {
       if (recoveredAddress == offer.contractOffer.verifier || recoveredAddress == offer.from )
       {
         await offer.update({lastVoucher:voucher})
+        this.emailOffer(offer, "Call payout")
         return true
       }
 
       if(recoveredAddress == this.hot.account.address && (recoveredAddress == offer.from || recoveredAddress == offer.initInfo.offerTerms.sideVerifier)) 
       {
         await offer.update({lastVoucher:voucher})
+        this.emailOffer(offer, "Call payout")
         return true
       }
     }
@@ -1777,6 +1787,34 @@ export default class Webrtc {
     const subject = `[${network}] ${ethAddress} have requested a withdraw of ${amountUsd}`
     const text = `[${network}] ${ethAddress} have sent over ${amount} ${amountType} in order to withdraw $${amountUsd}. The transaction hashis ${transactionHash}. He would like to be paid via ${JSON.stringify(recipientInfo)}`
     emailSupport('withdrawRequest@chai.video', subject, text)
+  }
+
+  getProfileUrl(address) {
+    if (address) {
+      return this.linker.getDappUrl() + "profile/" + address
+    }
+    return ''
+  }
+
+  async emailOffer(offer, action) {
+    const offerEmail = process.env.OFFER_NOTIFICATION_EMAIL
+    if (!offerEmail) {
+      return
+    }
+    let text = `${action} offer ${offer.fullId}
+    From:${this.getProfileUrl(offer.from)}
+    To:${this.getProfileUrl(offer.to)}
+
+    amount: ${offer.amount}
+    type: ${offer.amountType}
+    status: ${offer.contractOffer.status} 
+    `
+
+    if (offer.lastVoucher && offer.lastVoucher.payout) {
+      text += `payout: ${web3.utils.fromWei(offer.lastVoucher.payout)}
+      `
+    }
+    emailSupport(offerEmail, `${action} offer ${offer.fullId}`, text)
   }
 
   async submitWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature) {
