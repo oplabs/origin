@@ -450,9 +450,9 @@ class WebrtcSub {
             }
             if (transactionHash) {
               this.sendOffer(offer)
-              this.emailOffer(offer, "New")
+              this.logic.emailOffer(offer, "New")
             } else {
-              this.emailOffer(offer, "Sender call")
+              this.logic.emailOffer(offer, "Sender call")
             }
           }
         } else if (accept) {
@@ -502,9 +502,9 @@ class WebrtcSub {
             this.publish(CHANNEL_PREFIX + ethAddress, {from:this.subscriberEthAddress, subscribe})
             if (transactionHash) {
               this.sendOffer(offer)
-              this.emailOffer(offer, "Accepted")
+              this.logic.emailOffer(offer, "Accepted")
             } else {
-              this.emailOffer(offer, "Talent call")
+              this.logic.emailOffer(offer, "Talent call")
             }
           }
         }
@@ -556,7 +556,7 @@ class WebrtcSub {
         const {listingID, offerID} = collected.offer
         const offer = await this.logic.getOffer(listingID, offerID)
         logger.info("collecting offer:", offer)
-        this.emailOffer(offer, "Collected")
+        this.logic.emailOffer(offer, "Collected")
 
         if (!offer.active && offer.to == this.subscriberEthAddress)
         {
