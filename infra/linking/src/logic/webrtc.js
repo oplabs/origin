@@ -4,7 +4,7 @@ import db from './../models/'
 import extractAttestInfo, {extractAccountStat, extractLinkedin} from './../utils/extract-attest'
 import createHtml from './../utils/static-web'
 import * as stripe from './../utils/stripe'
-import emailSupport from './../utils/email-support'
+import {emailSupport, emailInfo} from './../utils/email-support'
 import { getEthToUSDRate } from './../utils/currency'
 import { setTurnCred } from './../utils/turn'
 import { sha3_224 } from 'js-sha3'
@@ -1814,7 +1814,7 @@ export default class Webrtc {
       text += `payout: ${web3.utils.fromWei(offer.lastVoucher.payout)}
       `
     }
-    emailSupport(offerEmail, `${action} offer ${offer.fullId}`, text)
+    emailInfo(offerEmail, `${action} offer ${offer.fullId}`, text)
   }
 
   async submitWithdraw(ethAddress, amount, amountType, amountUsd, transactionHash, recipientInfo, signature) {
