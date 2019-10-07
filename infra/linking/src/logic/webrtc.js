@@ -1222,7 +1222,7 @@ export default class Webrtc {
         //collected via server
         contractOffer.collected = true
         await dbOffer.update({active:false, contractOffer, ccInfo}, {transaction})
-        this.emailOffer(offer, "Collect")
+        this.emailOffer(dbOffer, "Collect")
       } else {
         throw new Error("invalid offer to claim")
       }
