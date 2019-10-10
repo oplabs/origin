@@ -819,13 +819,23 @@ export default class Webrtc {
     return users.map(u=> u.get({plain:true}))
   }
 
-  async getActiveAddresses() {
+  async getActiveAddresses(filter) {
     const actives = []
     if (ACTIVE_INFO_ONLY)
     {
+      const where = { active:true, '$UserInfo.flags$':{[db.Sequelize.Op.lt]:3}, '$UserInfo.banned$':{[db.Sequelize.Op.ne]:true}, '$UserInfo.hidden$':{[db.Sequelize.Op.ne]:true} }
+
+      if(filter) {
+        const like_filter = '%' + filter.replace('*', '%') + '%'
+        where[db.Sequelize.Op.or] = [
+          db.Sequelize.where(db.Sequelize.literal('"UserInfo"."info"->>\'name\''), {[db.Sequelize.Op.like]:like_filter}),
+          db.Sequelize.where(db.Sequelize.literal('"UserInfo"."info"->>\'description\''), {[db.Sequelize.Op.like]:like_filter})
+        ]
+      }
+
       const activeNotifcations = await db.WebrtcNotificationEndpoint.findAll({
         include:[ {model:db.UserInfo, required:true, attributes:["info", [db.Sequelize.literal('"WebrtcNotificationEndpoint"."last_online" + "UserInfo"."rank" * interval \'1 second\''), 'lastOnlineRank']]} ],
-        where: { active:true, '$UserInfo.flags$':{[db.Sequelize.Op.lt]:3}, '$UserInfo.banned$':{[db.Sequelize.Op.ne]:true}, '$UserInfo.hidden$':{[db.Sequelize.Op.ne]:true} }, order:[[db.Sequelize.literal('"UserInfo.lastOnlineRank"'), 'DESC']], limit:200})
+        where, order:[[db.Sequelize.literal('"UserInfo.lastOnlineRank"'), 'DESC']], limit:200})
 
       for (const notify of activeNotifcations) {
         if (!actives.includes(notify.ethAddress) && notify.UserInfo.info && notify.UserInfo.info.icon)

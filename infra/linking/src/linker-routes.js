@@ -351,9 +351,10 @@ router.ws('/webrtc-relay/:ethAddress', (ws, req) => {
 
 })
 
-router.get('/webrtc-addresses', async (req, res) => {
+router.get('/webrtc-addresses/:filter?', async (req, res) => {
   try {
-    const actives = await webrtc.getActiveAddresses()
+    const { filter } = req.params
+    const actives = await webrtc.getActiveAddresses(filter && decodeURIComponent(filter))
     res.send(actives)
   } catch (e) {
     logger.error('Internal server error: ', e)
