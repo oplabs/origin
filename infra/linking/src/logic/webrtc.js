@@ -1657,7 +1657,7 @@ export default class Webrtc {
     }
   }
 
-  async getPage(accountAddress, offerCode) {
+  async getPage(accountAddress, offerCode, path) {
     const BUNDLE_PATH = process.env.BUNDLE_PATH || "/"
     const keywords = "video, chat, ethereum, facetoface"
     if (accountAddress && accountAddress.startsWith("0x"))
@@ -1721,6 +1721,14 @@ export default class Webrtc {
       const playerUrl = videoUrl && (this.linker.getDappUrl() + "embed.html?v=" + videoUrl)
       offer.amountUsd = amountUsd
       return createHtml({title, description, url, imageUrl, videoUrl, playerUrl, ogType, twitterType}, {account, offer}, BUNDLE_PATH)
+    } else if (path == "talent") {
+       const ogType = "website"
+      const twitterType = "summary"
+      const title = "Chai: Monetize your fan base"
+      const description = "Get paid chatting one-on-one with your followers."
+      const url = this.linker.getDappUrl() 
+      const imageUrl = "https://chai.video/images/chai-logo.jpg"
+      return createHtml({title, description, url, imageUrl, ogType, twitterType}, {}, BUNDLE_PATH)
     } else {
       const ogType = "website"
       const twitterType = "summary"

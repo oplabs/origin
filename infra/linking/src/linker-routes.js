@@ -448,7 +448,7 @@ router.get('/webrtc-static/:path?/:pathAddress?', async (req, res) => {
   } else if (path == "req") {
     offerCode = pathAddress
   }
-  res.send(await webrtc.getPage(accountAddress, offerCode))
+  res.send(await webrtc.getPage(accountAddress, offerCode, path))
 })
 
 router.get('/linkedin-authed', async (req, res) => {
