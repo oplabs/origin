@@ -262,7 +262,7 @@ class WebrtcSub {
 
   getTurn(ethAddress, offer) {
     const pass = sha3_224(`${TURN_KEY}:${ethAddress}:${offer.fullId}`).slice(0, 16)
-    const prefix = TURN_PREFIX + Math.floor((new Date()).getTime()/ 10000) % 1000
+    const prefix = TURN_PREFIX
     setTurnCred(prefix+ethAddress.slice(2), pass)
     return {pass, prefix, host:TURN_HOST}
   }
